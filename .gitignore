@@ -1,0 +1,181 @@
+# ─────────────────────────────────────────────────────────────────────
+# CRITICAL — Secrets and API Keys (NEVER COMMIT)
+# ─────────────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+secrets/
+credentials.json
+api_keys.txt
+
+# ─────────────────────────────────────────────────────────────────────
+# Python
+# ─────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# ─────────────────────────────────────────────────────────────────────
+# IDE and Editors
+# ─────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.spyderproject
+.spyproject
+.ropeproject
+
+# ─────────────────────────────────────────────────────────────────────
+# Jupyter Notebooks
+# ─────────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# ─────────────────────────────────────────────────────────────────────
+# Data Files (most should NOT be in Git)
+# ─────────────────────────────────────────────────────────────────────
+# Raw university documents (potentially sensitive)
+data/raw_pdfs/*
+!data/raw_pdfs/.gitkeep
+
+# Processed data
+data/processed/*
+!data/processed/.gitkeep
+
+# Audio test files (too large for Git)
+data/test_audio/*.wav
+data/test_audio/*.mp3
+data/test_audio/*.m4a
+data/test_audio/*.flac
+!data/test_audio/.gitkeep
+
+# Large datasets
+*.csv
+*.tsv
+*.parquet
+*.arrow
+# Exception: small example/sample files
+!**/sample_*.csv
+!**/example_*.csv
+
+# ─────────────────────────────────────────────────────────────────────
+# Model Files (Way too large for Git — use HuggingFace/cloud storage)
+# ─────────────────────────────────────────────────────────────────────
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.h5
+*.pkl
+*.joblib
+models/
+checkpoints/
+weights/
+
+# HuggingFace cache
+.cache/
+~/.cache/huggingface/
+
+# ─────────────────────────────────────────────────────────────────────
+# Vector Database
+# ─────────────────────────────────────────────────────────────────────
+chroma_db/
+chromadb/
+*.chroma
+faiss_index/
+
+# ─────────────────────────────────────────────────────────────────────
+# Logs and Outputs
+# ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+*.log.*
+output/
+outputs/
+results/
+runs/
+wandb/
+mlruns/
+tensorboard_logs/
+
+# ─────────────────────────────────────────────────────────────────────
+# Testing
+# ─────────────────────────────────────────────────────────────────────
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+htmlcov/
+
+# ─────────────────────────────────────────────────────────────────────
+# Documentation builds
+# ─────────────────────────────────────────────────────────────────────
+docs/_build/
+site/
+
+# ─────────────────────────────────────────────────────────────────────
+# OS-specific
+# ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ─────────────────────────────────────────────────────────────────────
+# Temporary files
+# ─────────────────────────────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+*.old
