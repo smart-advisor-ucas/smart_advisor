@@ -1,85 +1,10 @@
-# ─────────────────────────────────────────────────────────────────────
-# Smart Advisor — Python Dependencies
-# ─────────────────────────────────────────────────────────────────────
-# Install with: pip install -r requirements.txt
-# ─────────────────────────────────────────────────────────────────────
-
-
-# ── Core ML / NLP ────────────────────────────────────────────────────
-torch>=2.1.0
-transformers>=4.40.0
-sentence-transformers>=3.0.0
-accelerate>=0.30.0
-
-# ── Vector Database ──────────────────────────────────────────────────
-chromadb>=0.5.0
-
-# ── RAG Framework ────────────────────────────────────────────────────
-langchain>=0.2.0
-langchain-community>=0.2.0
-langchain-openai>=0.1.0
-
-# ── PDF and Document Processing ──────────────────────────────────────
-pymupdf>=1.24.0
-pdfplumber>=0.11.0
-python-docx>=1.1.0
-
-# ── Data Handling ────────────────────────────────────────────────────
-pandas>=2.2.0
-numpy>=1.26.0
-pydantic>=2.7.0
-
-# ── Speech-to-Text ───────────────────────────────────────────────────
-openai-whisper>=20231117
-faster-whisper>=1.0.0
-# Uncomment if using these alternatives:
-# deepgram-sdk>=3.0.0
-
-# ── Text-to-Speech ───────────────────────────────────────────────────
-# Uncomment based on choice:
-# elevenlabs>=1.0.0
-# TTS>=0.22.0   # Coqui TTS (open-source option)
-
-# ── Audio Processing ─────────────────────────────────────────────────
-librosa>=0.10.0
-soundfile>=0.12.0
-pydub>=0.25.0
-
-# ── Evaluation ───────────────────────────────────────────────────────
-jiwer>=3.0.0
-ragas>=0.1.0
-
-# ── UI Framework (pick one) ──────────────────────────────────────────
-streamlit>=1.36.0
-# gradio>=4.36.0
-
-# ── Observability ────────────────────────────────────────────────────
-langfuse>=2.40.0
-
-# ── LLM API Clients ──────────────────────────────────────────────────
-openai>=1.30.0
-# anthropic>=0.30.0
-# google-generativeai>=0.7.0
-
-# ── Utilities ────────────────────────────────────────────────────────
-python-dotenv>=1.0.0
-tqdm>=4.66.0
-loguru>=0.7.0
-pyyaml>=6.0.0
-requests>=2.32.0
-
-# ── Arabic Text Processing ───────────────────────────────────────────
-camel-tools>=1.5.0
-pyarabic>=0.6.15
-
-# ── Development Tools ────────────────────────────────────────────────
-pytest>=8.2.0
-pytest-cov>=5.0.0
-black>=24.4.0
-isort>=5.13.0
-ruff>=0.4.0
-
-# ── Jupyter (for notebooks) ──────────────────────────────────────────
-jupyter>=1.0.0
-ipykernel>=6.29.0
-ipywidgets>=8.1.0
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+openai
+chromadb
+huggingface_hub
+numpy
+langchain-classic
+requests

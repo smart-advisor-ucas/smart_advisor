@@ -1,0 +1,218 @@
+"""
+Core chat logic, converted from the Gradio prototype's gradio_chat() function.
+
+A ChatSession holds all per-conversation state (profile, contact info, memory,
+onboarding/awaiting-info flags). The SessionStore keeps sessions in memory,
+keyed by session_id, so the frontend just needs to send a session_id with
+each request.
+
+NOTE: in-memory storage is wiped on server restart and won't work across
+multiple server processes/workers. For production, swap SessionStore's
+internals for Redis or a database — the ChatSession dataclass and
+process_message() function don't need to change.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from src.utils.config import github_client
+from src.rag.memory import get_empty_memory, save_to_memory, history_as_messages
+from src.rag.profile import extract_profile, next_onboarding_question
+from src.rag.retrieval import multi_query_search
+from src.rag.system_prompt import SYSTEM_PROMPT
+from src.utils.schemas import StudentProfile, StudentContact
+from fallback_service import record_unknown_question, handle_tool_calls, tools
+from src.utils.context_builder import build_context
+
+FALLBACK_MARKER = "لا تتوفر"  # used to locate the original question after a fallback
+
+
+@dataclass
+class ChatSession:
+    student: StudentContact = field(default_factory=StudentContact)
+    awaiting_info: bool = False
+    profile: StudentProfile = field(default_factory=StudentProfile)
+    onboarding: bool = True
+    memory: object = field(default_factory=get_empty_memory)
+    history: list[dict] = field(default_factory=list)  # [{"role": ..., "content": ...}, ...]
+
+
+class SessionStore:
+    """In-memory session store. Replace with Redis/DB for multi-worker deployments."""
+
+    def __init__(self):
+        self._sessions: dict[str, ChatSession] = {}
+
+    def get(self, session_id: str) -> ChatSession:
+        if session_id not in self._sessions:
+            self._sessions[session_id] = ChatSession()
+        return self._sessions[session_id]
+
+    def reset(self, session_id: str) -> ChatSession:
+        self._sessions[session_id] = ChatSession()
+        return self._sessions[session_id]
+
+
+session_store = SessionStore()
+
+
+def _find_original_question(history: list[dict], fallback: str) -> str:
+    """Walk history backwards to find the user question that triggered a fallback reply."""
+    for i in range(len(history) - 1, 0, -1):
+        if history[i].get("role") == "assistant" and FALLBACK_MARKER in (history[i].get("content") or ""):
+            prev = history[i - 1]
+            if prev.get("role") == "user":
+                return str(prev["content"])
+    return fallback
+
+
+def _extract_student_info(user_message: str, student: StudentContact) -> StudentContact:
+    """Try to extract name/email/phone from the student's message."""
+    import json as _json
+    try:
+        resp = github_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": (
+                    "Extract student contact details from the message if present."
+                    "Respond ONLY in JSON: {'name': '...', 'email': '...', 'phone': '...'}"
+                    "Use null for missing fields."
+                )},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.0,
+        )
+        extracted = _json.loads(resp.choices[0].message.content)
+        for key in ("name", "email", "phone"):
+            if extracted.get(key):
+                setattr(student, key, extracted[key])
+    except Exception:
+        pass
+    return student
+
+
+def process_message(session: ChatSession, user_message: str) -> str:
+    """
+    Process one user message against the given session, mutating session state
+    in place, and return the assistant's reply text.
+    """
+    if not user_message.strip():
+        return ""
+
+    session.history.append({"role": "user", "content": user_message})
+
+    # ── Phase 1: Onboarding — collect student profile ──────────────────
+    if session.onboarding:
+        session.profile = extract_profile(user_message, session.profile)
+        next_q = next_onboarding_question(session.profile)
+
+        if next_q:
+            response = next_q
+        else:
+            session.onboarding = False
+            response = (
+                "شكراً! الآن لديّ صورة واضحة عن وضعك الأكاديمي وأهدافك. "
+                "يمكنني مساعدتك بشكل أفضل. ما سؤالك؟"
+            )
+
+        session.history.append({"role": "assistant", "content": response})
+        return response
+
+    # ── Phase 2: Info-collection mode (post-fallback) ───────────────────
+    if session.awaiting_info:
+        session.student = _extract_student_info(user_message, session.student)
+        still_missing = session.student.missing()
+
+        if still_missing == "name":
+            response = "شكراً! ما اسمك الكريم؟"
+        elif still_missing == "contact":
+            response = "شكراً! هل يمكنك تزويدي ببريدك الإلكتروني أو رقم هاتفك حتى يتمكن المرشد من التواصل معك؟"
+        else:
+            original_q = _find_original_question(session.history, user_message)
+            record_unknown_question(
+                question=original_q,
+                name=session.student.name,
+                email=session.student.email,
+                phone=session.student.phone,
+            )
+            response = "شكراً! تم إحالة سؤالك إلى المرشد الأكاديمي وسيتواصل معك قريباً. هل لديك أي سؤال آخر؟"
+            session.awaiting_info = False
+
+        session.history.append({"role": "assistant", "content": response})
+        return response
+
+    # ── Phase 3: Normal RAG flow ─────────────────────────────────────────
+    search_result = multi_query_search(user_message, session.memory, session.profile)
+
+    # Layer 1: below similarity threshold — no relevant chunks at all
+    if not search_result["has_answer"]:
+        still_missing = session.student.missing()
+        if still_missing:
+            session.awaiting_info = True
+            response = (
+                "لا تتوفر لديّ معلومات كافية للإجابة على هذا السؤال.\n"
+                + ("سأحيل سؤالك إلى المرشد الأكاديمي. ما اسمك الكريم؟"
+                   if still_missing == "name"
+                   else "سأحيل سؤالك إلى المرشد الأكاديمي. هل يمكنك تزويدي ببريدك الإلكتروني أو رقم هاتفك؟")
+            )
+        else:
+            record_unknown_question(
+                question=user_message,
+                name=session.student.name,
+                email=session.student.email,
+                phone=session.student.phone,
+            )
+            response = "لا تتوفر لديّ معلومات كافية للإجابة على هذا السؤال. تم إحالة سؤالك إلى المرشد الأكاديمي وسيتواصل معك قريباً."
+
+        session.history.append({"role": "assistant", "content": response})
+        return response
+
+    # Layer 2: pass chunks + profile to LLM, allow tool call as second-level fallback
+    context = build_context(search_result["documents"])
+    history_msgs = history_as_messages(session.memory)
+    profile_ctx = session.profile.to_context_string()
+
+    prompts = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        *history_msgs,
+        {"role": "user", "content": (
+            f"معلومات الطالب: {profile_ctx}\n"
+            f"السياق:\n{context}\n"
+            f"السؤال: {user_message}\n"
+            f"If the context is sufficient, answer and tailor your response based on the student's information "
+            f"(For example: Does his GPA meet the admission requirements? Does the program suit him based on his interests?).\n"
+        )},
+    ]
+
+    response = ""
+    done = False
+    while not done:
+        resp_obj = github_client.chat.completions.create(
+            model="gpt-4o-mini", messages=prompts, tools=tools, temperature=0.1
+        )
+        finish_reason = resp_obj.choices[0].finish_reason
+        message = resp_obj.choices[0].message
+
+        if finish_reason == "tool_calls":
+            still_missing = session.student.missing()
+            if still_missing:
+                session.awaiting_info = True
+                response = (
+                    "لا تتوفر لديّ معلومات كافية للإجابة على هذا السؤال.\n"
+                    + ("سأحيل سؤالك إلى المرشد الأكاديمي. ما اسمك الكريم؟"
+                       if still_missing == "name"
+                       else "سأحيل سؤالك إلى المرشد الأكاديمي. هل يمكنك تزويدي ببريدك الإلكتروني أو رقم هاتفك؟")
+                )
+            else:
+                handle_tool_calls(message.tool_calls)
+                response = "لا تتوفر لديّ معلومات كافية للإجابة على هذا السؤال. تم إحالة سؤالك إلى المرشد الأكاديمي وسيتواصل معك قريباً."
+            done = True
+        else:
+            response = message.content
+            done = True
+
+    if not session.awaiting_info:
+        save_to_memory(session.memory, user_message, response)
+
+    session.history.append({"role": "assistant", "content": response})
+    return response
