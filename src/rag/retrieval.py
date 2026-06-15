@@ -8,7 +8,7 @@ import re
 from langchain_classic.memory import ConversationBufferWindowMemory
 
 from src.utils.config import github_client, SIMILARITY_THRESHOLD, TOP_K
-from metadata_filter import detect_metadata_filter
+from src.rag.metadata_filter import detect_metadata_filter
 from src.knowledge_base.vector_store import search
 from src.utils.schemas import StudentProfile
 

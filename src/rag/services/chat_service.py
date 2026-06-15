@@ -21,7 +21,7 @@ from src.rag.profile import extract_profile, next_onboarding_question
 from src.rag.retrieval import multi_query_search
 from src.rag.system_prompt import SYSTEM_PROMPT
 from src.utils.schemas import StudentProfile, StudentContact
-from fallback_service import record_unknown_question, handle_tool_calls, tools
+from src.rag.services.fallback_service import record_unknown_question, handle_tool_calls, tools
 from src.utils.context_builder import build_context
 
 FALLBACK_MARKER = "لا تتوفر"  # used to locate the original question after a fallback

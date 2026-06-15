@@ -9,7 +9,7 @@ The frontend should call POST /chat with {"session_id": "...", "message": "..."}
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes import chat
+from src.ui.routes import chat
 
 app = FastAPI(title="UCAS Smart Advisor API")
 

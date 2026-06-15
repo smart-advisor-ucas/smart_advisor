@@ -4,7 +4,7 @@ ChromaDB collection access and similarity/metadata search.
 import chromadb
 
 from src.utils.config import DB_PATH, COLLECTION_NAME, SIMILARITY_THRESHOLD
-from embeddings import embed_texts
+from src.knowledge_base.embeddings import embed_texts
 
 _client = chromadb.PersistentClient(path=DB_PATH)
 collection = _client.get_collection(COLLECTION_NAME)
