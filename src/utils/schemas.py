@@ -17,9 +17,6 @@ class StudentProfile(BaseModel):
     academic_track: Literal["علمي", "صناعي", "تكنولوجيا معلومات", "أدبي", "تجاري", "أخرى"] | None = Field(
         None, description="High school academic track"
     )
-    # enrollment_status: Literal["طالب حالي", "طالب جديد", "مهتم بالالتحاق"] | None = Field(
-    #     None, description="Whether the student is currently enrolled or prospective"
-    # )
 
     # Interests
     likes_math: bool | None = Field(None, description="Enjoys mathematics and statistics")
@@ -33,7 +30,6 @@ class StudentProfile(BaseModel):
     degree_preference: Literal["بكالوريوس", "دبلوم", "غير محدد"] | None = Field(
         None, description="Preferred degree level"
     )
-    # needs_financial_aid: bool | None = Field(None, description="Interested in scholarships")
 
     # Priority fields that drive onboarding — ordered by importance
     _PRIORITY = ["gpa", "academic_track", "likes_math", "interest_areas", "degree_preference"]

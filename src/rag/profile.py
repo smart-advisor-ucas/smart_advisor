@@ -4,7 +4,7 @@ Student profile extraction (LLM-based) and the onboarding question sequencer.
 import json
 import re
 
-from src.utils.config import github_client
+from src.utils.config import groq_client          
 from src.utils.schemas import StudentProfile
 
 _EXTRACTION_SYSTEM = """
@@ -36,8 +36,8 @@ Rules:
 def extract_profile(user_message: str, current: StudentProfile) -> StudentProfile:
     """Call LLM to extract profile fields from student message and merge with current profile."""
     try:
-        resp = github_client.chat.completions.create(
-            model="gpt-4o-mini",
+        resp = groq_client.chat.completions.create(          
+            model="llama-3.1-8b-instant", 
             messages=[
                 {"role": "system", "content": _EXTRACTION_SYSTEM},
                 {"role": "user", "content": (
@@ -51,18 +51,26 @@ def extract_profile(user_message: str, current: StudentProfile) -> StudentProfil
         raw = re.sub(r"```json|```", "", resp.choices[0].message.content).strip()
         extracted = json.loads(raw)
 
+        # NEW — strip whitespace from all extracted string/list values
+        cleaned = {}
+        for key, value in extracted.items():
+            if isinstance(value, str):
+                cleaned[key] = value.strip()
+            elif isinstance(value, list):
+                cleaned[key] = [v.strip() if isinstance(v, str) else v for v in value]
+            else:
+                cleaned[key] = value
+
         # Merge: only fill None / empty-list fields from extraction
         current_data = current.model_dump()
-        for key, value in extracted.items():
+        for key, value in cleaned.items():
             if value is None:
                 continue
             if key == "interest_areas" and isinstance(value, str):
                 value = [value]
             existing = current_data.get(key)
-            existing = current_data.get(key)
             if existing is None or (isinstance(existing, list) and len(existing) == 0):
                 current_data[key] = value
-        print(current_data)
         return StudentProfile(**current_data)
     except Exception as e:
         print(f"[Profile extraction error] {e}")
