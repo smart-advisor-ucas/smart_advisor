@@ -1,0 +1,45 @@
+# ─────────────────────────────────────────────────────────────────────
+# Voice pillar (src/voice/) — real-mode dependencies
+# ─────────────────────────────────────────────────────────────────────
+# MOCK mode (VOICE_BACKEND unset or "mock") needs NONE of this file — it's
+# the default specifically so Fatema can build against the voice layer
+# without installing any of this.
+#
+# This file is ONLY needed for VOICE_BACKEND=real.
+# Install: pip install -r requirements-voice.txt
+#
+# Versions below are pinned to what was actually installed and verified
+# working (imports, live calls) during the 2026-07-02 real-mode audit.
+# ─────────────────────────────────────────────────────────────────────
+
+# ── Optional convenience — loads a local .env file; works in mock mode too ──
+python-dotenv==1.0.1
+
+# ── STT: Whisper Large-v3 via transformers (NOT openai-whisper/faster-whisper —
+#    the code calls AutoModelForSpeechSeq2Seq directly) ─────────────────────
+torch==2.9.1
+transformers==4.57.3
+
+# ── TTS engine 1: Azure Neural (cloud) ───────────────────────────────────
+azure-cognitiveservices-speech==1.50.0
+
+# ── TTS engine 2: Piper (offline) + Arabic diacritization ───────────────
+piper-tts==1.4.2
+mishkal==0.4.1
+huggingface_hub==0.36.0
+
+# ── Shared audio I/O ──────────────────────────────────────────────────────
+soundfile==0.14.0
+numpy==2.3.5
+
+# ─────────────────────────────────────────────────────────────────────
+# System dependencies (not installable via pip)
+# ─────────────────────────────────────────────────────────────────────
+# ffmpeg — REQUIRED. Used by stt.py to normalize path/bytes input to
+#   16kHz mono WAV. Without it, real-mode STT fails immediately.
+#   Windows:  winget install Gyan.FFmpeg    (or: choco install ffmpeg)
+#   Verify:   ffmpeg -version
+#
+# espeak-ng — NOT required. piper-tts 1.4.2 (OHF-voice/piper1-gpl build)
+#   vendors its own espeak-ng-data and compiled phonemizer bridge, so no
+#   system espeak-ng install is needed.
