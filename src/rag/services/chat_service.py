@@ -15,11 +15,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from src.utils.config import github_client
-from src.rag.memory import get_empty_memory, save_to_memory, history_as_messages
+import threading
+
+from groq import APIStatusError
+from src.utils.config import github_client, groq_client
+from src.rag.memory import (
+    get_empty_memory, save_to_memory, history_as_messages,
+    strip_personalization_tail, _save_to_memory_background,
+)
 from src.rag.profile import extract_profile, next_onboarding_question
-from src.rag.retrieval import multi_query_search
+from src.rag.retrieval import multi_query_search, condense_followup_question
 from src.rag.system_prompt import SYSTEM_PROMPT
+from src.rag.conversational import is_conversational
 from src.utils.schemas import StudentProfile, StudentContact
 from src.rag.services.fallback_service import record_unknown_question, handle_tool_calls, tools
 from src.utils.context_builder import build_context
@@ -35,7 +42,8 @@ class ChatSession:
     onboarding: bool = True
     memory: object = field(default_factory=get_empty_memory)
     history: list[dict] = field(default_factory=list)  # [{"role": ..., "content": ...}, ...]
-
+    pending_question: str | None = None
+    _memory_lock: threading.Lock = field(default_factory=threading.Lock)
 
 class SessionStore:
     """In-memory session store. Replace with Redis/DB for multi-worker deployments."""
@@ -54,16 +62,6 @@ class SessionStore:
 
 
 session_store = SessionStore()
-
-
-def _find_original_question(history: list[dict], fallback: str) -> str:
-    """Walk history backwards to find the user question that triggered a fallback reply."""
-    for i in range(len(history) - 1, 0, -1):
-        if history[i].get("role") == "assistant" and FALLBACK_MARKER in (history[i].get("content") or ""):
-            prev = history[i - 1]
-            if prev.get("role") == "user":
-                return str(prev["content"])
-    return fallback
 
 
 def _extract_student_info(user_message: str, student: StudentContact) -> StudentContact:
@@ -90,12 +88,19 @@ def _extract_student_info(user_message: str, student: StudentContact) -> Student
         pass
     return student
 
+def _save_to_memory_background_locked(session: ChatSession, user_msg: str, assistant_msg: str) -> None:
+    with session._memory_lock:
+        _save_to_memory_background(session.memory, user_msg, assistant_msg)
 
 def process_message(session: ChatSession, user_message: str) -> str:
     """
     Process one user message against the given session, mutating session state
     in place, and return the assistant's reply text.
     """
+
+    with session._memory_lock:
+        pass  # wait for any in-flight background save to finish before reading memory
+
     if not user_message.strip():
         return ""
 
@@ -128,20 +133,27 @@ def process_message(session: ChatSession, user_message: str) -> str:
         elif still_missing == "contact":
             response = "شكراً! هل يمكنك تزويدي ببريدك الإلكتروني أو رقم هاتفك حتى يتمكن المرشد من التواصل معك؟"
         else:
-            original_q = _find_original_question(session.history, user_message)
-            record_unknown_question(
-                question=original_q,
+            record_unknown_question(                      
+                question=session.pending_question,
                 name=session.student.name,
                 email=session.student.email,
                 phone=session.student.phone,
             )
             response = "شكراً! تم إحالة سؤالك إلى المرشد الأكاديمي وسيتواصل معك قريباً. هل لديك أي سؤال آخر؟"
             session.awaiting_info = False
+            session.pending_question = None
 
         session.history.append({"role": "assistant", "content": response})
         return response
 
+    # ── Conversational check — before any retrieval ──────────────────────  # NEW BLOCK
+    conversational, polite_response = is_conversational(user_message)
+    if conversational:
+        session.history.append({"role": "assistant", "content": polite_response or ""})
+        return polite_response
+
     # ── Phase 3: Normal RAG flow ─────────────────────────────────────────
+    resolved_message = condense_followup_question(user_message, session.memory)
     search_result = multi_query_search(user_message, session.memory, session.profile)
 
     # Layer 1: below similarity threshold — no relevant chunks at all
@@ -170,6 +182,21 @@ def process_message(session: ChatSession, user_message: str) -> str:
     # Layer 2: pass chunks + profile to LLM, allow tool call as second-level fallback
     context = build_context(search_result["documents"])
     history_msgs = history_as_messages(session.memory)
+
+    # ── NEW: force coverage of every program actually retrieved ─────────
+    programs_in_context = sorted({
+        m.get("program") for m in search_result["metadatas"] if m.get("program")
+    })
+    coverage_instruction = ""
+    if len(programs_in_context) > 2:
+        coverage_instruction = (
+            f"\n\n Note: The above context covers this programs {len(programs_in_context)}:"
+            f"{'، '.join(programs_in_context)}.\n"
+            f"Your answer should address each major on this list individually (even if the previous conversation mentioned fewer majors)\n"
+            "don't limit yourself to majors already discussed or those that seem most relevant to the student's interests.\n"
+            "Place any personal recommendations based on the student's profile in a separate, clear paragraph at the end of your answer, only after you have covered all the majors."
+        )
+
     profile_ctx = session.profile.to_context_string()
 
     prompts = [
@@ -179,17 +206,25 @@ def process_message(session: ChatSession, user_message: str) -> str:
             f"معلومات الطالب: {profile_ctx}\n"
             f"السياق:\n{context}\n"
             f"السؤال: {user_message}\n"
-            f"If the context is sufficient, answer and tailor your response based on the student's information "
-            f"(For example: Does his GPA meet the admission requirements? Does the program suit him based on his interests?).\n"
+            f"Use student information only if the question explicitly concerns its relevance to them."
+            f"(e.g., Is it suitable for me? Can I enroll? Is my GPA sufficient?) or other relative questions"
+            f"Otherwise, answer the question as is, without analyzing eligibility or suitability.\n"
+            f"{coverage_instruction}\n"
         )},
     ]
 
     response = ""
     done = False
     while not done:
-        resp_obj = github_client.chat.completions.create(
-            model="gpt-4o-mini", messages=prompts, tools=tools, temperature=0.1
-        )
+        try:
+            resp_obj = groq_client.chat.completions.create(
+                model="qwen/qwen3-32b", messages=prompts, tools=tools, temperature=0.1
+            )
+        except APIStatusError as e:
+            resp_obj = github_client.chat.completions.create(
+                model="gpt-4o-mini", messages=prompts, tools=tools, temperature=0.1
+            )
+
         finish_reason = resp_obj.choices[0].finish_reason
         message = resp_obj.choices[0].message
 
@@ -204,7 +239,12 @@ def process_message(session: ChatSession, user_message: str) -> str:
                        else "سأحيل سؤالك إلى المرشد الأكاديمي. هل يمكنك تزويدي ببريدك الإلكتروني أو رقم هاتفك؟")
                 )
             else:
-                handle_tool_calls(message.tool_calls)
+                record_unknown_question(
+                    question=user_message,
+                    name=session.student.name,
+                    email=session.student.email,
+                    phone=session.student.phone,
+                )
                 response = "لا تتوفر لديّ معلومات كافية للإجابة على هذا السؤال. تم إحالة سؤالك إلى المرشد الأكاديمي وسيتواصل معك قريباً."
             done = True
         else:
@@ -212,7 +252,11 @@ def process_message(session: ChatSession, user_message: str) -> str:
             done = True
 
     if not session.awaiting_info:
-        save_to_memory(session.memory, user_message, response)
+        threading.Thread(
+            target=_save_to_memory_background_locked,
+            args=(session, user_message, response),
+            daemon=True,
+        ).start()
 
     session.history.append({"role": "assistant", "content": response})
     return response
