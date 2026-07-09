@@ -179,3 +179,4 @@ temp/
 *.bak
 *.backup
 *.old
+src/ui/frontend/node_modules/ 
