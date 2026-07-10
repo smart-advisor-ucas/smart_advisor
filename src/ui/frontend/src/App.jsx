@@ -97,27 +97,42 @@ export default function App() {
       });
       const reply = res.data.reply;
       setMessages([{ role: 'bot', text: reply, time: getTime() }]);
-      speakText(reply);
     } catch {
       setError('تعذّر الاتصال بالخادم. تأكدي من تشغيل الـ Backend.');
     }
   };
 
-  const sendMessage = async (text) => {
+  // voiceMode = true  → رد صوتي فقط (بدون نص على الشاشة)
+  // voiceMode = false → رد نصي على الشاشة (بدون صوت)
+  const sendMessage = async (text, voiceMode = false) => {
     const q = text.trim();
     if (!q || loading) return;
     setError('');
     setInput('');
+
+    // سؤال المستخدم — يظهر دايماً على الشاشة
     setMessages(prev => [...prev, { role: 'user', text: q, time: getTime() }]);
     setLoading(true);
+
     try {
       const res = await axios.post(`${API_URL}/chat`, {
         session_id: sessionId,
         message: q
       });
       const reply = res.data.reply;
-      setMessages(prev => [...prev, { role: 'bot', text: reply, time: getTime() }]);
-      speakText(reply);
+
+      if (voiceMode) {
+        // ── وضع الصوت: رد صوتي فقط بدون نص ──
+        speakText(reply);
+      } else {
+        // ── وضع النص: رد نصي على الشاشة ──
+        setMessages(prev => [...prev, {
+          role: 'bot',
+          text: reply,
+          time: getTime()
+        }]);
+      }
+
     } catch {
       setError('تعذّر الاتصال بالخادم. تأكدي من تشغيل الـ Backend.');
     } finally {
@@ -129,14 +144,13 @@ export default function App() {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      sendMessage(input);
+      sendMessage(input, false);  // نص → رد نصي
     }
   };
 
   // ── STT — يشتغل لما يضغط ويوقف لما يضغط مرة ثانية ──
   const toggleRecording = () => {
     if (recording) {
-      // إيقاف يدوي
       if (window._currentRecorder?.state === 'recording') {
         window._currentRecorder.stop();
       }
@@ -162,7 +176,7 @@ export default function App() {
             headers: { 'Content-Type': 'multipart/form-data' }
           });
           if (res.data.text) {
-            sendMessage(res.data.text);
+            sendMessage(res.data.text, true);  // صوت → رد صوتي فقط
           } else if (res.data.error) {
             setError(res.data.error);
           }
@@ -173,12 +187,10 @@ export default function App() {
         setRecording(false);
         stream.getTracks().forEach(t => t.stop());
         window._currentRecorder = null;
-        window._currentStream = null;
       };
 
       recorder.start();
       window._currentRecorder = recorder;
-      window._currentStream = stream;
 
     }).catch(() => {
       setError('تعذّر الوصول للميكروفون');
@@ -214,7 +226,7 @@ export default function App() {
         {messages.length === 1 && (
           <div className="suggestions">
             {SUGGESTIONS.map((s, i) => (
-              <button key={i} className="suggestion-chip" onClick={() => sendMessage(s)}>
+              <button key={i} className="suggestion-chip" onClick={() => sendMessage(s, false)}>
                 {s}
               </button>
             ))}
@@ -290,7 +302,7 @@ export default function App() {
           />
           <button
             className="send-btn"
-            onClick={() => sendMessage(input)}
+            onClick={() => sendMessage(input, false)}
             disabled={!input.trim() || loading}
           >
             ➤
