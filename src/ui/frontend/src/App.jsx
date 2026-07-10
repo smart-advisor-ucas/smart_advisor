@@ -15,7 +15,6 @@ function getTime() {
   return new Date().toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
 }
 
-// ── Session ID — يبقى ثابت بعد Refresh ──
 function getSessionId() {
   let id = localStorage.getItem('advisor_session_id');
   if (!id) {
@@ -24,6 +23,20 @@ function getSessionId() {
   }
   return id;
 }
+
+function cleanMarkdown(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/#{1,6} /g, '')
+    .replace(/`(.*?)`/g, '$1')
+    .replace(/^[-] /gm, '')
+    .replace(/(\d+\. )/g, '\n$1')
+    .replace(/\| /g, '\n')
+    .trim();
+}
+
+const sessionId = getSessionId();
 
 export default function App() {
   const [messages, setMessages] = useState([]);
@@ -34,15 +47,12 @@ export default function App() {
   const [darkMode, setDarkMode]   = useState(false);
   const bottomRef                 = useRef(null);
   const inputRef                  = useRef(null);
-  const sessionId                 = getSessionId();
 
-  // ── عند تحميل الصفحة: استرجع السجل أو ابدأ جديد ──
   useEffect(() => {
     const loadHistory = async () => {
       try {
         const res = await axios.get(`${API_URL}/chat/history/${sessionId}`);
         if (res.data.history && res.data.history.length > 0) {
-          // عندنا سجل سابق — اعرضه
           const mapped = res.data.history.map(m => ({
             role: m.role === 'assistant' ? 'bot' : 'user',
             text: m.content,
@@ -50,11 +60,9 @@ export default function App() {
           }));
           setMessages(mapped);
         } else {
-          // ما في سجل — ابدأ محادثة جديدة
           startNew();
         }
       } catch {
-        // لو فشل الاتصال — ابدأ جديد
         startNew();
       }
     };
@@ -65,7 +73,6 @@ export default function App() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // ── بدء محادثة جديدة ──
   const startNew = async () => {
     try {
       const res = await axios.post(`${API_URL}/chat/reset`, {
@@ -82,7 +89,6 @@ export default function App() {
     }
   };
 
-  // ── إرسال رسالة ──
   const sendMessage = async (text) => {
     const q = text.trim();
     if (!q || loading) return;
@@ -162,14 +168,9 @@ export default function App() {
             </div>
             <div>
               <div className={`bubble ${msg.role}`}>
-                {msg.role === 'bot' && msg.text.includes('\n') ? (
-                  <>
-                    <strong>{msg.text.split('\n')[0]}</strong>
-                    {msg.text.split('\n').slice(1).map((line, j) => (
-                      <p key={j} style={{ marginTop: '6px' }}>{line}</p>
-                    ))}
-                  </>
-                ) : msg.text}
+                {cleanMarkdown(msg.text).split('\n').map((line, j) => (
+                  <p key={j} style={{ margin: j === 0 ? 0 : '4px 0 0' }}>{line}</p>
+                ))}
               </div>
               <div className="msg-time">{msg.time}</div>
             </div>
