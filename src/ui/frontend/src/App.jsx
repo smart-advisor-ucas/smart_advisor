@@ -73,17 +73,31 @@ export default function App() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  // ── TTS — تشغيل الرد صوتاً ──
+  const speakText = async (text) => {
+    try {
+      const res = await axios.post(
+        `${API_URL}/voice/synthesize`,
+        { text },
+        { responseType: 'blob' }
+      );
+      const url = URL.createObjectURL(res.data);
+      const audio = new Audio(url);
+      audio.play();
+    } catch {
+      console.error('تعذّر تشغيل الصوت');
+    }
+  };
+
   const startNew = async () => {
     try {
       const res = await axios.post(`${API_URL}/chat/reset`, {
         session_id: sessionId,
         message: ''
       });
-      setMessages([{
-        role: 'bot',
-        text: res.data.reply,
-        time: getTime()
-      }]);
+      const reply = res.data.reply;
+      setMessages([{ role: 'bot', text: reply, time: getTime() }]);
+      speakText(reply);
     } catch {
       setError('تعذّر الاتصال بالخادم. تأكدي من تشغيل الـ Backend.');
     }
@@ -101,11 +115,9 @@ export default function App() {
         session_id: sessionId,
         message: q
       });
-      setMessages(prev => [...prev, {
-        role: 'bot',
-        text: res.data.reply,
-        time: getTime()
-      }]);
+      const reply = res.data.reply;
+      setMessages(prev => [...prev, { role: 'bot', text: reply, time: getTime() }]);
+      speakText(reply);
     } catch {
       setError('تعذّر الاتصال بالخادم. تأكدي من تشغيل الـ Backend.');
     } finally {
@@ -121,8 +133,13 @@ export default function App() {
     }
   };
 
+  // ── STT — يشتغل لما يضغط ويوقف لما يضغط مرة ثانية ──
   const toggleRecording = () => {
     if (recording) {
+      // إيقاف يدوي
+      if (window._currentRecorder?.state === 'recording') {
+        window._currentRecorder.stop();
+      }
       setRecording(false);
       return;
     }
@@ -155,12 +172,13 @@ export default function App() {
 
         setRecording(false);
         stream.getTracks().forEach(t => t.stop());
+        window._currentRecorder = null;
+        window._currentStream = null;
       };
 
       recorder.start();
-      setTimeout(() => {
-        if (recorder.state === 'recording') recorder.stop();
-      }, 8000);
+      window._currentRecorder = recorder;
+      window._currentStream = stream;
 
     }).catch(() => {
       setError('تعذّر الوصول للميكروفون');
@@ -241,11 +259,15 @@ export default function App() {
         {recording && (
           <div className="voice-bar">
             <span>🎙️</span>
-            <span>جاري الاستماع... (8 ثواني)</span>
+            <span>جاري الاستماع... تكلم الآن</span>
             <div className="wave">
               <span /><span /><span /><span /><span />
             </div>
-            <button className="voice-stop" onClick={toggleRecording}>إيقاف</button>
+            <button className="voice-stop" onClick={() => {
+              if (window._currentRecorder?.state === 'recording') {
+                window._currentRecorder.stop();
+              }
+            }}>إيقاف</button>
           </div>
         )}
 
