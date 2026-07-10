@@ -122,8 +122,50 @@ export default function App() {
   };
 
   const toggleRecording = () => {
-    setRecording(prev => !prev);
-    // TODO: سجى — ربط Web Speech API هنا
+    if (recording) {
+      setRecording(false);
+      return;
+    }
+
+    setRecording(true);
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+
+      recorder.ondataavailable = e => chunks.push(e.data);
+
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const formData = new FormData();
+        formData.append('audio', blob, 'audio.webm');
+
+        try {
+          const res = await axios.post(`${API_URL}/voice/transcribe`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          if (res.data.text) {
+            sendMessage(res.data.text);
+          } else if (res.data.error) {
+            setError(res.data.error);
+          }
+        } catch {
+          setError('تعذّر تحويل الصوت');
+        }
+
+        setRecording(false);
+        stream.getTracks().forEach(t => t.stop());
+      };
+
+      recorder.start();
+      setTimeout(() => {
+        if (recorder.state === 'recording') recorder.stop();
+      }, 8000);
+
+    }).catch(() => {
+      setError('تعذّر الوصول للميكروفون');
+      setRecording(false);
+    });
   };
 
   return (
@@ -199,7 +241,7 @@ export default function App() {
         {recording && (
           <div className="voice-bar">
             <span>🎙️</span>
-            <span>جاري الاستماع...</span>
+            <span>جاري الاستماع... (8 ثواني)</span>
             <div className="wave">
               <span /><span /><span /><span /><span />
             </div>

@@ -8,13 +8,10 @@ The frontend should call POST /chat with {"session_id": "...", "message": "..."}
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from src.ui.routes import chat
+from src.ui.routes import chat, voice
 
 app = FastAPI(title="UCAS Smart Advisor API")
 
-# Allow the frontend (running on a different origin during development) to call this API.
-# TODO: restrict allow_origins to your actual frontend domain before production.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,7 +21,7 @@ app.add_middleware(
 )
 
 app.include_router(chat.router)
-
+app.include_router(voice.router)
 
 @app.get("/health")
 def health():
