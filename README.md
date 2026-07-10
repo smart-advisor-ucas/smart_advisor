@@ -148,6 +148,9 @@ Use clear, prefixed commit messages:
 - [Phase 1 Report](docs/phase1_report.pdf)
 - [Architecture Overview](docs/architecture.md)
 - [Meeting Notes](docs/meeting_notes/)
+- [Project Flow — how the pillars fit together](docs/PROJECT_FLOW.md)
+- [Voice Layer Usage Guide (notebook)](docs/voice_usage_guide.ipynb)
+- [Voice Layer Integration Contract](src/voice/CONTRACT.md)
 
 ---
 
