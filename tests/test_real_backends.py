@@ -98,7 +98,7 @@ class TestWhisperTranscribe:
             r = stt._whisper_transcribe(wav16k, "ar", True)
 
         assert r.text == "مرحبا بالعالم"
-        assert r.backend == "whisper-large-v3"
+        assert r.backend == "whisper-large-v3-turbo"
         assert r.language == "ar"
         assert r.audio_duration_sec > 0
         assert r.sample_rate == 16_000

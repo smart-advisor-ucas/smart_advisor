@@ -5,7 +5,7 @@
     print(result.text)                      # MSA transcript
 
 Runs in mock mode by default (no model, no GPU). Set VOICE_BACKEND=real to use
-Whisper Large-v3.
+Whisper Large-v3-turbo (override the model via the WHISPER_MODEL_ID env var).
 """
 from __future__ import annotations
 import asyncio
@@ -29,7 +29,10 @@ logger = logging.getLogger(__name__)
 # --- Tunables --------------------------------------------------------------- #
 MAX_AUDIO_SEC = 60.0
 NO_SPEECH_THRESHOLD = 0.6
-WHISPER_MODEL_ID = "openai/whisper-large-v3"
+# Large-v3-turbo: ~1.6GB vs large-v3's ~3GB, much faster on CPU, small accuracy
+# tradeoff. Override with the WHISPER_MODEL_ID env var to swap models without
+# editing code (e.g. back to "openai/whisper-large-v3" for max accuracy).
+WHISPER_MODEL_ID = os.getenv("WHISPER_MODEL_ID", "openai/whisper-large-v3-turbo")
 TARGET_SR = 16000
 
 # The transcript the mock returns, so Fatema's RAG gets deterministic input.
@@ -135,7 +138,8 @@ def _mock_transcribe(audio, language, normalize_to_msa) -> TranscriptionResult:
 
 
 # --------------------------------------------------------------------------- #
-# Real backend (Whisper Large-v3) — lazy-loaded so importing this module is cheap
+# Real backend (Whisper, model id set by WHISPER_MODEL_ID) — lazy-loaded so
+# importing this module is cheap
 # --------------------------------------------------------------------------- #
 _model = None
 _processor = None
@@ -260,7 +264,7 @@ def _whisper_transcribe(audio, language, normalize_to_msa) -> TranscriptionResul
     return TranscriptionResult(
         text=text,
         language=language,
-        backend="whisper-large-v3",
+        backend=WHISPER_MODEL_ID.rsplit("/", 1)[-1],
         latency_sec=round(time.perf_counter() - t0, 3),
         audio_duration_sec=round(duration, 2),
         sample_rate=TARGET_SR,

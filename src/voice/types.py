@@ -55,7 +55,7 @@ class TranscriptionResult:
     """What `transcribe_audio` returns on success."""
     text: str                              # the transcript (MSA-normalized)
     language: str                          # detected/forced language, e.g. "ar"
-    backend: str                           # "whisper-large-v3" or "mock-stt"
+    backend: str                           # "whisper-large-v3-turbo" or "mock-stt"
     latency_sec: float                     # how long transcription took
     audio_duration_sec: float              # length of the input audio
     sample_rate: int                       # always 16000 after normalization

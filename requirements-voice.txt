@@ -15,8 +15,9 @@
 # ── Optional convenience — loads a local .env file; works in mock mode too ──
 python-dotenv==1.0.1
 
-# ── STT: Whisper Large-v3 via transformers (NOT openai-whisper/faster-whisper —
-#    the code calls AutoModelForSpeechSeq2Seq directly) ─────────────────────
+# ── STT: Whisper (large-v3-turbo by default; override via WHISPER_MODEL_ID) via
+#    transformers (NOT openai-whisper/faster-whisper — the code calls
+#    AutoModelForSpeechSeq2Seq directly) ─────────────────────────────────────
 torch==2.9.1
 transformers==4.57.3
 

@@ -77,7 +77,7 @@ Exception types: `AudioFormatError`, `AudioTooLongError`, `EmptyTranscriptError`
 | | Mock (default) | Real |
 |---|---|---|
 | How to enable | nothing — it's the default | `export VOICE_BACKEND=real` |
-| STT returns | a fixed MSA transcript | Whisper Large-v3 output |
+| STT returns | a fixed MSA transcript | Whisper output (large-v3-turbo by default, override via `WHISPER_MODEL_ID`) |
 | TTS returns | a short placeholder tone (valid .wav) | Azure Neural *or* offline Piper speech |
 | Needs GPU / key | no | GPU for STT; TTS depends on `VOICE_TTS` (see below) |
 
