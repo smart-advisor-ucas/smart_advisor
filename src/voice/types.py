@@ -1,4 +1,4 @@
-"""Shared types for the voice layer: result objects and the exception hierarchy.
+﻿"""Shared types for the voice layer: result objects and the exception hierarchy.
 
 Fatema only ever needs to know two things from this file:
   1. The result objects she gets back (TranscriptionResult, SynthesisResult).
@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 # --------------------------------------------------------------------------- #
-# Exceptions — the voice layer RAISES on failure, it never returns error text. #
+# Exceptions ظ¤ the voice layer RAISES on failure, it never returns error text. #
 # --------------------------------------------------------------------------- #
 class VoiceError(Exception):
     """Base class for every error the voice layer can raise.
@@ -48,14 +48,14 @@ class TTSBackendError(TTSError):
 
 
 # --------------------------------------------------------------------------- #
-# Result objects — immutable, typed, with useful metadata alongside the data.  #
+# Result objects ظ¤ immutable, typed, with useful metadata alongside the data.  #
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class TranscriptionResult:
     """What `transcribe_audio` returns on success."""
     text: str                              # the transcript (MSA-normalized)
     language: str                          # detected/forced language, e.g. "ar"
-    backend: str                           # "whisper-large-v3" or "mock-stt"
+    backend: str                           # "whisper-large-v3-turbo" or "mock-stt"
     latency_sec: float                     # how long transcription took
     audio_duration_sec: float              # length of the input audio
     sample_rate: int                       # always 16000 after normalization

@@ -1,10 +1,10 @@
-"""Configuration: backend mode, TTS engine selection, and credentials.
+﻿"""Configuration: backend mode, TTS engine selection, and credentials.
 
 Backend mode (VOICE_BACKEND):
   - "mock" (default): no models, no GPU, no API key.
   - "real": Whisper Large-v3 for STT and a real TTS engine (see below).
 
-TTS engine (VOICE_TTS) — only used when backend == "real":
+TTS engine (VOICE_TTS) ظ¤ only used when backend == "real":
   - "azure": Azure Neural only (raises if it fails).
   - "piper": Piper offline only (tashkeel -> ar_JO-kareem, no network).
   - "auto"  (default): try Azure, fall back to Piper if Azure fails

@@ -1,4 +1,4 @@
-"""voice — the Smart Advisor voice layer.
+﻿"""voice ظ¤ the Smart Advisor voice layer.
 
 Public API (this is the whole contract Fatema depends on):
 
@@ -11,7 +11,7 @@ Public API (this is the whole contract Fatema depends on):
 Async variants (for FastAPI):
     from voice import transcribe_audio_async, synthesize_speech_async
 
-By default everything runs in MOCK mode — no models, no GPU, no API key — so you
+By default everything runs in MOCK mode ظ¤ no models, no GPU, no API key ظ¤ so you
 can build and test against it immediately. Set the env var VOICE_BACKEND=real
 (plus AZURE_SPEECH_KEY / AZURE_SPEECH_REGION) to use Whisper + Azure for real.
 """

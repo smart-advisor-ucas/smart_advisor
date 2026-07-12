@@ -1,11 +1,11 @@
-"""Speech-to-Text. Public surface:  transcribe_audio  /  transcribe_audio_async.
+﻿"""Speech-to-Text. Public surface:  transcribe_audio  /  transcribe_audio_async.
 
     from voice import transcribe_audio
     result = transcribe_audio(audio)        # audio: path | bytes | numpy array
     print(result.text)                      # MSA transcript
 
 Runs in mock mode by default (no model, no GPU). Set VOICE_BACKEND=real to use
-Whisper Large-v3.
+Whisper Large-v3-turbo (override the model via the WHISPER_MODEL_ID env var).
 """
 from __future__ import annotations
 import asyncio
@@ -29,12 +29,15 @@ logger = logging.getLogger(__name__)
 # --- Tunables --------------------------------------------------------------- #
 MAX_AUDIO_SEC = 60.0
 NO_SPEECH_THRESHOLD = 0.6
-WHISPER_MODEL_ID = "openai/whisper-large-v3"
+# Large-v3-turbo: ~1.6GB vs large-v3's ~3GB, much faster on CPU, small accuracy
+# tradeoff. Override with the WHISPER_MODEL_ID env var to swap models without
+# editing code (e.g. back to "openai/whisper-large-v3" for max accuracy).
+WHISPER_MODEL_ID = os.getenv("WHISPER_MODEL_ID", "openai/whisper-large-v3-turbo")
 TARGET_SR = 16000
 
 # The transcript the mock returns, so Fatema's RAG gets deterministic input.
 _MOCK_TRANSCRIPT = (
-    "ما هي المهارات التي سأكتسبها عند دراسة تخصص الذكاء الاصطناعي وعلم البيانات؟"
+    "┘à╪د ┘ç┘è ╪د┘┘à┘ç╪د╪▒╪د╪ز ╪د┘╪ز┘è ╪│╪ث┘â╪ز╪│╪ذ┘ç╪د ╪╣┘╪» ╪»╪▒╪د╪│╪ر ╪ز╪«╪╡╪╡ ╪د┘╪░┘â╪د╪ة ╪د┘╪د╪╡╪╖┘╪د╪╣┘è ┘ê╪╣┘┘à ╪د┘╪ذ┘è╪د┘╪د╪ز╪ا"
 )
 
 
@@ -90,7 +93,7 @@ def transcribe_audio(
 
 async def transcribe_audio_async(audio, **kw) -> TranscriptionResult:
     """Async wrapper. Whisper is compute-bound, so we offload to a thread rather
-    than fake async — this keeps a FastAPI event loop responsive."""
+    than fake async ظ¤ this keeps a FastAPI event loop responsive."""
     return await asyncio.to_thread(transcribe_audio, audio, **kw)
 
 
@@ -135,7 +138,8 @@ def _mock_transcribe(audio, language, normalize_to_msa) -> TranscriptionResult:
 
 
 # --------------------------------------------------------------------------- #
-# Real backend (Whisper Large-v3) — lazy-loaded so importing this module is cheap
+# Real backend (Whisper, model id set by WHISPER_MODEL_ID) ظ¤ lazy-loaded so
+# importing this module is cheap
 # --------------------------------------------------------------------------- #
 _model = None
 _processor = None
@@ -159,7 +163,7 @@ def _load_whisper():
 def _coerce_to_clean_wav(audio) -> Path:
     """Normalize any input to a 16 kHz mono WAV on disk via FFmpeg.
 
-    We never trust the file extension — we always re-encode path/bytes inputs
+    We never trust the file extension ظ¤ we always re-encode path/bytes inputs
     through FFmpeg so container-format mismatches (e.g. m4a named .wav) are
     caught early.  Numpy arrays are assumed to be 16 kHz mono float32 already
     and are written directly via soundfile without FFmpeg.
@@ -170,7 +174,7 @@ def _coerce_to_clean_wav(audio) -> Path:
     import subprocess
     import tempfile
 
-    # numpy array: write directly — no FFmpeg needed.
+    # numpy array: write directly ظ¤ no FFmpeg needed.
     # ASSUMPTION: the array is already 16 kHz mono float32.  If your capture
     # device records at a different rate, resample before calling this function.
     if hasattr(audio, "shape") and hasattr(audio, "dtype"):
@@ -253,14 +257,14 @@ def _whisper_transcribe(audio, language, normalize_to_msa) -> TranscriptionResul
         if not text:
             raise EmptyTranscriptError("model returned no speech")
     finally:
-        # Always remove the temp WAV — _coerce_to_clean_wav always returns a
+        # Always remove the temp WAV ظ¤ _coerce_to_clean_wav always returns a
         # freshly-created file, so deleting it here is always correct.
         wav_path.unlink(missing_ok=True)
 
     return TranscriptionResult(
         text=text,
         language=language,
-        backend="whisper-large-v3",
+        backend=WHISPER_MODEL_ID.rsplit("/", 1)[-1],
         latency_sec=round(time.perf_counter() - t0, 3),
         audio_duration_sec=round(duration, 2),
         sample_rate=TARGET_SR,

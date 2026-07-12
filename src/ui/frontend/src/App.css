@@ -449,6 +449,177 @@ body {
 .voice-stop:hover { background: #DBEAFE; }
 
 /* ══════════════════════════════════════
+   VOICE MESSAGE BUBBLE (WhatsApp-style, inline in chat)
+══════════════════════════════════════ */
+.voice-msg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  min-width: 180px;
+}
+
+.voice-msg.bot {
+  background: var(--bot-bubble);
+  border: 1px solid var(--border);
+  border-bottom-right-radius: 4px;
+  box-shadow: var(--shadow);
+}
+
+.voice-msg.user {
+  background: var(--user-bubble);
+  border-bottom-left-radius: 4px;
+}
+
+.voice-msg-play {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  background: rgba(0,0,0,0.08);
+  color: inherit;
+}
+
+.voice-msg.user .voice-msg-play { background: rgba(255,255,255,0.25); }
+.voice-msg-play:hover { background: rgba(0,0,0,0.15); }
+.voice-msg.user .voice-msg-play:hover { background: rgba(255,255,255,0.35); }
+
+.voice-msg-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(0,0,0,0.12);
+  overflow: visible;
+  position: relative;
+  cursor: pointer;
+}
+
+.voice-msg.user .voice-msg-track { background: rgba(255,255,255,0.3); }
+
+.voice-msg-progress {
+  height: 100%;
+  background: var(--ucas-blue);
+  border-radius: 2px;
+  transition: width 0.05s linear;
+  pointer-events: none;
+}
+
+.voice-msg.user .voice-msg-progress { background: #fff; }
+
+.voice-msg-knob {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ucas-blue);
+  transform: translateY(-50%);
+  box-shadow: 0 0 0 2px var(--bot-bubble);
+  pointer-events: none;
+}
+
+.voice-msg.user .voice-msg-knob {
+  background: #fff;
+  box-shadow: 0 0 0 2px var(--user-bubble);
+}
+
+.voice-msg-time {
+  font-size: 11px;
+  min-width: 32px;
+  text-align: left;
+  opacity: 0.8;
+}
+
+/* ── قائمة الخيارات (⋮) وتفاعل ── */
+.voice-msg-wrap {
+  position: relative;
+}
+
+.voice-msg-menu-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  padding: 2px 4px;
+  color: inherit;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.voice-msg-menu-btn:hover { opacity: 1; }
+
+.voice-msg-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  padding: 6px;
+  z-index: 20;
+  min-width: 130px;
+}
+
+.voice-msg-menu-item {
+  display: block;
+  width: 100%;
+  text-align: right;
+  background: none;
+  border: none;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.voice-msg-menu-item:hover { background: var(--surface-2); }
+
+.voice-msg-reactions {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+}
+
+.voice-msg-reaction-option {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: transform 0.1s;
+}
+
+.voice-msg-reaction-option:hover {
+  background: var(--surface-2);
+  transform: scale(1.25);
+}
+
+.voice-msg-badge {
+  position: absolute;
+  bottom: -10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  padding: 1px 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+.voice-msg-badge.bot  { right: 8px; }
+.voice-msg-badge.user { left: 8px; }
+
+/* ══════════════════════════════════════
    ERROR
 ══════════════════════════════════════ */
 .error-bubble {

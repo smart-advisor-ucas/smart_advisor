@@ -1,13 +1,13 @@
-"""Text-to-Speech. Public surface:  synthesize_speech  /  synthesize_speech_async.
+﻿"""Text-to-Speech. Public surface:  synthesize_speech  /  synthesize_speech_async.
 
     from voice import synthesize_speech
-    result = synthesize_speech("النص العربي هنا")
+    result = synthesize_speech("╪د┘┘╪╡ ╪د┘╪╣╪▒╪ذ┘è ┘ç┘╪د")
     play(result.audio_path)                 # a .wav file on disk
 
 Mock by default (a placeholder tone, no setup). In real mode the engine is chosen
 by VOICE_TTS (or the `engine=` arg):
   - "azure": Azure Neural (needs key + network)
-  - "piper": offline — Mishkal tashkeel -> Piper (ar_JO-kareem)
+  - "piper": offline ظ¤ Mishkal tashkeel -> Piper (ar_JO-kareem)
   - "auto"  (default): try Azure, fall back to Piper if Azure fails.
 """
 from __future__ import annotations
@@ -155,7 +155,7 @@ def _mock_synth(text, voice, out: Path) -> SynthesisResult:
 
 
 # --------------------------------------------------------------------------- #
-# Real backend 1 — Azure Neural (cloud)                                        #
+# Real backend 1 ظ¤ Azure Neural (cloud)                                        #
 # --------------------------------------------------------------------------- #
 def _azure_synth(text, voice, out: Path) -> SynthesisResult:
     key, region = azure_credentials()
@@ -197,7 +197,7 @@ def _azure_synth(text, voice, out: Path) -> SynthesisResult:
 
 
 # --------------------------------------------------------------------------- #
-# Real backend 2 — Piper (offline):  Mishkal tashkeel -> ar_JO-kareem          #
+# Real backend 2 ظ¤ Piper (offline):  Mishkal tashkeel -> ar_JO-kareem          #
 # --------------------------------------------------------------------------- #
 _mishkal = None
 _piper_model_path = None
