@@ -104,8 +104,15 @@ def _expand_ambiguous_programs(programs: list[str], query: str) -> list[str]:
             result |= group
     return list(result)
 
-
-
+# ── Maps an LLM-detected boolean flag to its Chroma "category" value. ──────
+# Adding a new filterable category in the future = adding ONE line here plus
+# one clause in the prompt below. Nothing else in this file needs to change.
+CATEGORY_FLAG_MAP = {
+    "is_study_plan": "study_plan",
+    "is_program_info": "program_info",
+    "is_scholarship": "scholarship",
+    "is_career_opportunities": "career_opportunities",
+}
 
 _FILTER_SYSTEM = f"""
 You are an assistant who determines whether a student's question refers to a specific academic program or course, and what category of information they want.
@@ -126,6 +133,12 @@ Your task:
 7. Determine if the student is asking about general program facts — admission requirement/GPA cutoff, degree type, duration, credit hours, college/department, or a general overview of the program (but NOT the full semester-by-semester curriculum) or something like that. If so, set "is_program_info" to true.
 8. Determine if the student is asking about scholarships, financial aid, grants, or fee discounts something like: منحة، منح، مساعدة مالية، إعفاء. or any other similar words. If so, set "is_scholarship" to true.
 9. Determine if the student is asking a broad question about ALL specializations at UCAS, OR comparing a program to "other majors" / "بقية التخصصات" / "باقي البرامج" without naming those other majors specifically. If so, set "all_programs" to true and include ALL programs from the list in "programs".
+10. Set "is_career_opportunities" to true if the student is asking about jobs, career paths,
+   salaries, the job market, remote work, freelancing, or life after graduation
+
+IMPORTANT — a question can need MORE THAN ONE of flags 6-9 at the same time.
+Example: "ما هي خطة الدراسة وما هي فرص العمل بعد التخرج؟" → is_study_plan=true AND
+is_career_opportunities=true, BOTH at once. Never suppress one flag because another fired.
 
 CRITICAL RULE — Ambiguous Program Names:
 =========================================
@@ -171,7 +184,7 @@ Examples for the category flags:
 - "ما الفرق بين علم البيانات والأمن السيبراني؟" → all_programs=false, programs=["علم البيانات والذكاء الاصطناعي", "هندسة أمن المعلومات السيبراني"]
 
 Return ONLY JSON:
-{{"programs": [...] or ["علم البيانات والذكاء الاصطناعي"], "course_codes": [...] or null, "course_names": [...] or null, "is_study_plan": true or false, "is_program_info": true or false, "is_scholarship": true or false, "all_programs": true or false}}
+{{"programs": [...] or ["علم البيانات والذكاء الاصطناعي"], "course_codes": [...] or null, "course_names": [...] or null, "is_study_plan": true or false, "is_program_info": true or false, "is_scholarship": true or false, "is_career_opportunities": true or false, "all_programs": true or false}}
 """
 
 def _category_and_programs_filter(category: str, programs: list[str]) -> dict:
@@ -180,20 +193,17 @@ def _category_and_programs_filter(category: str, programs: list[str]) -> dict:
 
 def detect_metadata_filter(query: str, memory: "ConversationBufferWindowMemory | None" = None) -> dict | None:
     """
-    Ask LLM to detect program/course/category mentioned in query.
-    Returns (chromadb_where_clause_or_None, mode) where mode is:
-      "exact"      -> caller should bypass embedding search (collection.get)
-      "similarity" -> caller should run normal embedding similarity search
+    Returns (filters, programs, course_codes, course_names) where `filters`
+    is a LIST of independent exact-fetch requests:
+        [{"category": "study_plan", "where": {...}}, {"category": "career_opportunities", "where": {...}}, ...]
+ 
+    Unlike the old version, this NEVER stops at the first matching category —
+    every flag the LLM set gets its own filter entry, so a compound question
+    ("خطة الدراسة وفرص العمل") returns filters for BOTH categories.
+ 
+    course_codes/course_names/programs are still returned separately for the
+    similarity-search fallback path, exactly as before.
     """
-    history_msgs = []
-    if memory is not None:
-        chat_history = memory.load_memory_variables({})["history"]
-        # keep it short — this call doesn't need full context, just enough
-        # to resolve "هذا التخصص" / "نفس البرنامج" type references
-        history_msgs = [
-            {"role": ("user" if m.type == "human" else "assistant"), "content": m.content}
-            for m in chat_history[-4:]
-        ]
 
     try:
         resp = github_client.chat.completions.create(
@@ -214,7 +224,8 @@ def detect_metadata_filter(query: str, memory: "ConversationBufferWindowMemory |
             raw_programs = [raw_programs]  # wrap stray string in a list
         programs = [p for p in raw_programs if p in KNOWN_PROGRAMS]
 
-        if detected.get("all_programs", False):
+        all_programs_flag = detected.get("all_programs", False)
+        if all_programs_flag:
             programs = list(KNOWN_PROGRAMS)
 
         # Safety net for the أمن المعلومات ambiguity, independent of the LLM call
@@ -230,70 +241,40 @@ def detect_metadata_filter(query: str, memory: "ConversationBufferWindowMemory |
         course_names     = [p for p in raw_course_names if p in KNOWN_COURSES]
         print(f"[Filter] course_names={course_names}")
 
-        is_study_plan = detected.get("is_study_plan", False)
-        is_study_plan   = detected.get("is_study_plan", False)
-        is_program_info = detected.get("is_program_info", False)
-        is_scholarship  = detected.get("is_scholarship", False)
-        print(f"is_study_plan={is_study_plan} is_program_info={is_program_info} is_scholarship={is_scholarship}")
-
-        # ── Scholarship: exact category fetch, not tied to a program ───────
-        if is_scholarship:
-            f = {"category": "scholarship"}
-            print("[Filter] scholarship — exact category fetch")
-            return f, "exact"
-
-
-        if is_study_plan and programs:
-            f = _category_and_programs_filter("study_plan", programs)
-            print(f"[Filter] study_plan, programs={programs}")
-            return f, "exact"
-
-        # ── NEW: broad "all programs" comparison — exact fetch, not similarity ──
-        # Bypasses embedding search entirely so retrieval isn't biased by how the
-        # question happens to be phrased, and isn't dominated by whichever program
-        # has the most chunks in the DB (DS&AI has a full syllabus; diploma
-        # programs only have 1-2 chunks each). Guarantees every program gets
-        # equal representation: one program_info + one career_opportunities
-        # chunk per program.
-        if detected.get("all_programs", False) and not is_study_plan:
-            f = {"$and": [
-                {"category": {"$in": ["program_info", "career_opportunities"]}},
-                {"program": {"$in": programs}}
-            ]}
-            print(f"[Filter] all_programs comparison — exact fetch, programs={programs}")
-            return f, "exact"
-
-        # ── Course code / name — similarity search, unchanged from before ──
-        if course_codes:
-            f = {"course_code": {"$in": course_codes}} if len(course_codes) > 1 else {"course_code": course_codes[0]}
-            if programs:
-                prog_f = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
-                f = {"$and": [f, prog_f]}
-            print(f"[Filter] course_codes={course_codes}, programs={programs}")
-            return f, "similarity"
-
-        if course_names:
-            f = {"course_name": {"$in": course_names}} if len(course_names) > 1 else {"course_name": course_names[0]}
-            if programs:
-                prog_f = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
-                f = {"$and": [f, prog_f]}
-            print(f"[Filter] course_names={course_names}, programs={programs}")
-            return f, "similarity"
-            
-        # ── Program info: exact category + program fetch ────────────────────
-        if is_program_info:
-            if not programs:
-                programs = ["علم البيانات والذكاء الاصطناعي"]
-            f = _category_and_programs_filter("program_info", programs)
-            print(f"[Filter] program_info, programs={programs}")
-            return f, "exact"
-
-        if programs:
-            f = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
-            print(f"[Filter] programs={programs}")
-            return f, "similarity"
-        return None, "similarity"
-
+        for flag in CATEGORY_FLAG_MAP:
+                print(f"  {flag}={detected.get(flag, False)}")
+    
+        filters = []
+    
+        # ── Broad "all programs" comparison — its own independent filter ──
+        if all_programs_flag and not detected.get("is_study_plan", False):
+            filters.append({
+                "category": "comparison",
+                "where": {"$and": [
+                    {"category": {"$in": ["program_info", "career_opportunities"]}},
+                    {"program": {"$in": programs}}
+                ]}
+            })
+    
+        # ── Every other category flag gets its OWN filter entry. ──────────
+        # Scholarship isn't program-scoped (college-wide), everything else is.
+        if detected.get("is_scholarship", False):
+            filters.append({"category": "scholarship", "where": {"category": "scholarship"}})
+    
+        for flag, category in CATEGORY_FLAG_MAP.items():
+            if category == "scholarship":
+                continue  # handled above (no program scoping)
+            if detected.get(flag, False):
+                p = programs or ["علم البيانات والذكاء الاصطناعي"]
+                filters.append({
+                    "category": category,
+                    "where": _category_and_programs_filter(category, p)
+                })
+    
+        return filters, programs, course_codes, course_names
+    
     except Exception as e:
         print(f"[Filter detection error] {e}")
-        return None, "similarity"
+        return [], [], [], []
+ 
+ 

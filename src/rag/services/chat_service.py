@@ -154,13 +154,14 @@ def process_message(session: ChatSession, user_message: str) -> str:
 
     # ── Phase 3: Normal RAG flow ─────────────────────────────────────────
     resolved_message = condense_followup_question(user_message, session.memory)
-    search_result = multi_query_search(user_message, session.memory, session.profile)
+    search_result = multi_query_search(resolved_message, session.memory, session.profile)
 
     # Layer 1: below similarity threshold — no relevant chunks at all
     if not search_result["has_answer"]:
         still_missing = session.student.missing()
         if still_missing:
             session.awaiting_info = True
+            pending_question = resolved_message
             response = (
                 "لا تتوفر لديّ معلومات كافية للإجابة على هذا السؤال.\n"
                 + ("سأحيل سؤالك إلى المرشد الأكاديمي. ما اسمك الكريم؟"
@@ -169,7 +170,7 @@ def process_message(session: ChatSession, user_message: str) -> str:
             )
         else:
             record_unknown_question(
-                question=user_message,
+                question=resolved_message,
                 name=session.student.name,
                 email=session.student.email,
                 phone=session.student.phone,
@@ -205,7 +206,7 @@ def process_message(session: ChatSession, user_message: str) -> str:
         {"role": "user", "content": (
             f"معلومات الطالب: {profile_ctx}\n"
             f"السياق:\n{context}\n"
-            f"السؤال: {user_message}\n"
+            f"السؤال: {resolved_message}\n"
             f"Use student information only if the question explicitly concerns its relevance to them."
             f"(e.g., Is it suitable for me? Can I enroll? Is my GPA sufficient?) or other relative questions"
             f"Otherwise, answer the question as is, without analyzing eligibility or suitability.\n"
@@ -232,6 +233,7 @@ def process_message(session: ChatSession, user_message: str) -> str:
             still_missing = session.student.missing()
             if still_missing:
                 session.awaiting_info = True
+                pending_question = resolved_message
                 response = (
                     "لا تتوفر لديّ معلومات كافية للإجابة على هذا السؤال.\n"
                     + ("سأحيل سؤالك إلى المرشد الأكاديمي. ما اسمك الكريم؟"
@@ -240,7 +242,7 @@ def process_message(session: ChatSession, user_message: str) -> str:
                 )
             else:
                 record_unknown_question(
-                    question=user_message,
+                    question=resolved_message,
                     name=session.student.name,
                     email=session.student.email,
                     phone=session.student.phone,
