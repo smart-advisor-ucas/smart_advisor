@@ -40,14 +40,17 @@ function cleanMarkdown(text) {
     .replace(/^[-] /gm, '')
     .replace(/(\d+\. )/g, '\n$1')
     .replace(/\| /g, '\n')
+    // شيل رموز المساقات (CS101, DS201, MATH301 إلخ)
+    .replace(/\b[A-Z]{2,4}\d{3,4}\b/g, '')
     .trim();
 }
 
 const sessionId = getSessionId();
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const SPEED_OPTIONS = ['1x', '1.25x', '1.5x', '2x'];
 
-// ── فقاعة صوتية بأسلوب واتساب: زر تشغيل دائري + خط تقدم قابل للسحب + مدة + قائمة (تنزيل/تفاعل) ──
+// ── فقاعة صوتية بأسلوب واتساب: زر تشغيل دائري + خط تقدم قابل للسحب + مدة + قائمة (تنزيل/تفاعل/تسريع) ──
 function VoiceBubble({ audioUrl, role, reaction, onReact }) {
   const audioRef = useRef(null);
   const trackRef = useRef(null);
@@ -58,10 +61,13 @@ function VoiceBubble({ audioUrl, role, reaction, onReact }) {
   const [dragging, setDragging] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reactOpen, setReactOpen] = useState(false);
+  const [speedOpen, setSpeedOpen] = useState(false);
+  const [speed, setSpeed] = useState(1);
 
   useEffect(() => {
     const audio = new Audio(audioUrl);
     audioRef.current = audio;
+    audio.playbackRate = speed;
 
     const onLoaded = () => setDuration(audio.duration || 0);
     const onTime = () => {
@@ -85,7 +91,7 @@ function VoiceBubble({ audioUrl, role, reaction, onReact }) {
       audio.removeEventListener('timeupdate', onTime);
       audio.removeEventListener('ended', onEnd);
     };
-  }, [audioUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [audioUrl, speed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = () => {
     const audio = audioRef.current;
@@ -148,6 +154,12 @@ function VoiceBubble({ audioUrl, role, reaction, onReact }) {
     setMenuOpen(false);
   };
 
+  const changeSpeed = (newSpeed) => {
+    setSpeed(parseFloat(newSpeed));
+    setSpeedOpen(false);
+    setMenuOpen(false);
+  };
+
   const shownTime = playing || progress > 0 ? currentTime : duration;
 
   return (
@@ -182,8 +194,13 @@ function VoiceBubble({ audioUrl, role, reaction, onReact }) {
 
         {menuOpen && (
           <div className="voice-msg-menu">
-            {!reactOpen ? (
+            {!reactOpen && !speedOpen ? (
               <>
+                {role === 'bot' && (
+                  <button className="voice-msg-menu-item" onClick={() => setSpeedOpen(true)}>
+                    ⚡ {speed}x تسريع
+                  </button>
+                )}
                 <button className="voice-msg-menu-item" onClick={() => setReactOpen(true)}>
                   😊 تفاعل
                 </button>
@@ -191,7 +208,7 @@ function VoiceBubble({ audioUrl, role, reaction, onReact }) {
                   ⬇️ تنزيل
                 </button>
               </>
-            ) : (
+            ) : reactOpen ? (
               <div className="voice-msg-reactions">
                 {REACTIONS.map(emoji => (
                   <button
@@ -203,7 +220,19 @@ function VoiceBubble({ audioUrl, role, reaction, onReact }) {
                   </button>
                 ))}
               </div>
-            )}
+            ) : speedOpen ? (
+              <div className="voice-msg-speeds">
+                {SPEED_OPTIONS.map(s => (
+                  <button
+                    key={s}
+                    className={`voice-msg-speed-option ${parseFloat(s) === speed ? 'active' : ''}`}
+                    onClick={() => changeSpeed(s)}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
       </div>
@@ -302,9 +331,10 @@ export default function App() {
       });
       const reply = chatRes.data.reply;
 
+      const cleanedReply = cleanMarkdown(reply);
       const ttsRes = await axios.post(
         `${API_URL}/voice/synthesize`,
-        { text: reply },
+        { text: cleanedReply },
         { responseType: 'blob' }
       );
       const botAudioUrl = URL.createObjectURL(ttsRes.data);
@@ -431,7 +461,7 @@ export default function App() {
                 />
               ) : (
                 <div className={`bubble ${msg.role}`}>
-                  {cleanMarkdown(msg.text).split('\n').map((line, j) => (
+                  {msg.text.split('\n').map((line, j) => (
                     <p key={j} style={{ margin: j === 0 ? 0 : '4px 0 0' }}>{line}</p>
                   ))}
                 </div>
@@ -503,6 +533,10 @@ export default function App() {
 
         <div className="input-hint">
           اضغط Enter للإرسال أو 🎙️ للتحدث · المعلومات مستخرجة من وثائق UCAS الرسمية
+        </div>
+
+        <div className="copyright">
+          © 2026 UCAS Smart Advisor. جميع الحقوق محفوظة
         </div>
       </footer>
 

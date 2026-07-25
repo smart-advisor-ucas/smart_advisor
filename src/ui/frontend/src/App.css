@@ -395,6 +395,15 @@ body {
   margin-top: 8px;
 }
 
+.copyright {
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
 /* ══════════════════════════════════════
    VOICE BAR
 ══════════════════════════════════════ */
@@ -537,7 +546,7 @@ body {
   opacity: 0.8;
 }
 
-/* ── قائمة الخيارات (⋮) وتفاعل ── */
+/* ── قائمة الخيارات (⋮) وتفاعل وتسريع ── */
 .voice-msg-wrap {
   position: relative;
 }
@@ -603,6 +612,38 @@ body {
 .voice-msg-reaction-option:hover {
   background: var(--surface-2);
   transform: scale(1.25);
+}
+
+.voice-msg-speeds {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  flex-direction: column;
+}
+
+.voice-msg-speed-option {
+  background: none;
+  border: 1px solid transparent;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: all 0.1s;
+  font-family: inherit;
+  color: var(--text-primary);
+  text-align: center;
+  width: 100%;
+}
+
+.voice-msg-speed-option:hover {
+  background: var(--surface-2);
+}
+
+.voice-msg-speed-option.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  font-weight: 600;
 }
 
 .voice-msg-badge {

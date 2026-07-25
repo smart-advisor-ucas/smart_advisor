@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # --- Tunables --------------------------------------------------------------- #
 MAX_CHARS = 3000  # Azure F0 free-tier per-request character cap
-DEFAULT_VOICE = "ar-SA-ZariyahNeural"
+DEFAULT_VOICE = "ar-SA-HamedNeural"
 SR = 24000
 
 AZURE_VOICES = {

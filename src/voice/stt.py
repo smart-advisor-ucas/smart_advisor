@@ -154,7 +154,7 @@ def _load_whisper():
         dtype = torch.float16 if torch.cuda.is_available() else torch.float32
         device = "cuda" if torch.cuda.is_available() else "cpu"
         _model = AutoModelForSpeechSeq2Seq.from_pretrained(
-            WHISPER_MODEL_ID, torch_dtype=dtype
+            WHISPER_MODEL_ID, dtype=dtype
         ).to(device)
         _processor = AutoProcessor.from_pretrained(WHISPER_MODEL_ID)
     return _model, _processor

@@ -91,3 +91,4 @@ def _save_to_memory_background(memory: ConversationBufferWindowMemory, user_msg:
     except Exception as e:
         print(f"[Background memory save error] {e}")
         save_to_memory(memory, user_msg, assistant_msg)  # fail safe — save unstripped rather than lose the turn
+
