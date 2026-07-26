@@ -69,6 +69,67 @@ def estimate_tokens(text: str) -> int:
     """Rough token estimate without a tokenizer dependency (~2.2 chars/token)."""
     return max(1, int(len(text) / 2.2))
 
+def _related_faq_filter(category: str) -> dict:
+    """
+    FAQ paragraphs are sometimes hand-tagged as relevant to a specific
+    category even though their own category is "faq" (e.g. a paragraph
+    discussing course load lives under category=faq but carries
+    "study_plan_related": true). Whenever a category filter fires, we
+    ALSO pull in any faq chunk carrying "<category>_related": true.
+ 
+    If that flag doesn't exist yet for a given category (e.g. nobody has
+    tagged any FAQ paragraph as "career_opportunities_related" yet), this
+    where-clause simply matches zero chunks — safe no-op, no crash.
+    """
+    return {"$and": [{"category": "faq"}, {f"{category}_related": True}]}
+
+def _round_robin_trim(buckets: "dict[str, list[tuple[str, dict]]]", max_context_tokens: int):
+    """
+    Given {category: [(doc, meta), ...]}, returns (documents, metadatas,
+    running_tokens) built by taking one chunk from each non-empty category
+    in turn, stopping once the token budget is hit — but always giving
+    every category at least ONE chunk first, even if that alone exceeds
+    budget. This is what keeps a compound query (e.g. scholarship +
+    career_opportunities, ~3,600 tokens combined if dumped in full) from
+    silently starving one category or blowing past a small model's total
+    request limit (e.g. GitHub Models' 8,000-token cap on gpt-4o-mini).
+    """
+    buckets = {c: list(chunks) for c, chunks in buckets.items() if chunks}
+    merged_docs: list[str] = []
+    merged_meta: list[dict] = []
+    running_tokens = 0
+    guaranteed = set()  # categories that already got their first chunk
+ 
+    categories = list(buckets.keys())
+    round_idx = 0
+    while categories:
+        cat = categories[round_idx % len(categories)]
+        doc, meta = buckets[cat].pop(0)
+        doc_tokens = estimate_tokens(doc)
+ 
+        must_keep = cat not in guaranteed  # first chunk per category is free
+        if not must_keep and running_tokens + doc_tokens > max_context_tokens and merged_docs:
+            if not buckets[cat]:
+                categories.remove(cat)
+                continue
+            round_idx = (round_idx + 1) % len(categories)
+            continue
+ 
+        merged_docs.append(doc)
+        merged_meta.append(meta)
+        running_tokens += doc_tokens
+        guaranteed.add(cat)
+ 
+        if not buckets[cat]:
+            categories.remove(cat)
+        if categories:
+            round_idx = (round_idx + 1) % len(categories)
+ 
+        if running_tokens >= max_context_tokens and len(guaranteed) == len(buckets):
+            break
+ 
+    return merged_docs, merged_meta, running_tokens
+    
 
 def multi_query_search(
     user_message: str,
@@ -79,31 +140,70 @@ def multi_query_search(
     max_context_tokens: int = MAX_CONTEXT_TOKENS,
 ) -> dict:
     """
-    1. Detect metadata filter + mode ("exact" or "similarity") from the query.
-    2. "exact" mode: direct metadata lookup, bypassing embedding search entirely
-       (used for study_plan / program_info / scholarship / all_programs comparisons).
-    3. "similarity" mode (or exact-fetch found nothing): generate query variants
-       and search each CONCURRENTLY (ThreadPoolExecutor) — each search() call is
-       I/O-bound (HF embedding API + Chroma query), so this is a real speedup,
-       verified safe against HF's free-tier rate limits under this load.
-    4. Merge results keeping the HIGHEST score per unique chunk, rank, and trim
-       to both max_chunks and max_context_tokens.
+    1. Detect ALL active category filters from the query (not just one).
+    2. Exact-fetch every active filter, PLUS its related FAQ paragraphs
+       (via "<category>_related": true), and merge everything together.
+    3. Only if NONE of the exact filters found anything, fall back to the
+       existing multi-query similarity search (unchanged from before).
     """
-    metadata_filter, filter_mode = detect_metadata_filter(user_message, memory)
-
-    if filter_mode == "exact" and metadata_filter:
-        result = search(user_message, where=metadata_filter, is_exact_fetch=True)
-        if result["has_answer"]:
-            return result
-        print("  [Multi-Query] exact-category fetch found nothing — falling back to similarity search")
-        metadata_filter = None
-
+    filters, programs, course_codes, course_names = detect_metadata_filter(user_message, memory)
+ 
+    if filters:
+        # Per-category buckets (not one flat list) so we can round-robin
+        # across categories below — a compound query must not let one big
+        # category (e.g. career_opportunities) starve a smaller one
+        # (e.g. scholarship) out of the token budget entirely.
+        seen_keys: set[str] = set()
+        buckets: dict[str, list[tuple[str, dict]]] = {}
+ 
+        for f in filters:
+            bucket = buckets.setdefault(f["category"], [])
+ 
+            result = search(user_message, where=f["where"], is_exact_fetch=True)
+            if result["has_answer"]:
+                for doc, meta in zip(result["documents"], result["metadatas"]):
+                    key = re.sub(r"\s+", "", doc)[:200]
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        bucket.append((doc, meta))
+ 
+            related = search(user_message, where=_related_faq_filter(f["category"]), is_exact_fetch=True)
+            if related["has_answer"]:
+                for doc, meta in zip(related["documents"], related["metadatas"]):
+                    key = re.sub(r"\s+", "", doc)[:200]
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        bucket.append((doc, meta))
+ 
+        if any(buckets.values()):
+            merged_docs, merged_meta, running_tokens = _round_robin_trim(buckets, max_context_tokens)
+            print(f"[Multi-Query] {len(filters)} active filter(s) -> {len(merged_docs)} chunks kept "
+                  f"across {len(buckets)} categories (~{running_tokens} est. tokens, budget={max_context_tokens})")
+            return {"has_answer": True, "documents": merged_docs, "metadatas": merged_meta, "best_score": 1.0}
+ 
+        print("  [Multi-Query] none of the exact-category filters matched anything — falling back to similarity search")
+ 
+    # ── Similarity-search fallback: identical to the previous implementation ──
+    metadata_filter = None
+    if course_codes:
+        metadata_filter = {"course_code": {"$in": course_codes}} if len(course_codes) > 1 else {"course_code": course_codes[0]}
+        if programs:
+            prog_f = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
+            metadata_filter = {"$and": [metadata_filter, prog_f]}
+    elif course_names:
+        metadata_filter = {"course_name": {"$in": course_names}} if len(course_names) > 1 else {"course_name": course_names[0]}
+        if programs:
+            prog_f = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
+            metadata_filter = {"$and": [metadata_filter, prog_f]}
+    elif programs:
+        metadata_filter = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
+ 
     queries = generate_queries(user_message, memory, profile)
     print(f"[Multi-Query] {len(queries)} queries: {queries}")
-
+ 
     chunk_map: dict[str, tuple[float, str, dict]] = {}
     best_score = 0.0
-
+ 
     with ThreadPoolExecutor(max_workers=len(queries)) as executor:
         futures = {executor.submit(search, q, top_k, metadata_filter): q for q in queries}
         for future in as_completed(futures):
@@ -112,20 +212,18 @@ def multi_query_search(
             except Exception as e:
                 print(f"[Multi-Query] search failed for a query variant: {e}")
                 continue
-
             if result["best_score"] > best_score:
                 best_score = result["best_score"]
-
             for doc, meta, score in zip(result["documents"], result["metadatas"], result["scores"]):
                 key = re.sub(r"\s+", "", doc)[:200]
                 if key not in chunk_map or score > chunk_map[key][0]:
                     chunk_map[key] = (score, doc, meta)
-
+ 
     if not chunk_map or best_score < SIMILARITY_THRESHOLD:
         return {"has_answer": False, "documents": [], "metadatas": [], "best_score": best_score}
-
+ 
     ranked = sorted(chunk_map.values(), key=lambda x: x[0], reverse=True)[:max_chunks]
-
+ 
     merged_docs, merged_meta, running_tokens = [], [], 0
     for score, doc, meta in ranked:
         doc_tokens = estimate_tokens(doc)
@@ -134,11 +232,10 @@ def multi_query_search(
         merged_docs.append(doc)
         merged_meta.append(meta)
         running_tokens += doc_tokens
-
+ 
     print(f"[Multi-Query] {len(chunk_map)} unique chunks found, kept {len(merged_docs)} "
           f"(~{running_tokens} estimated tokens, budget={max_context_tokens})")
     return {"has_answer": True, "documents": merged_docs, "metadatas": merged_meta, "best_score": best_score}
-
 
 # ── NEW: query condensation — resolve elliptical follow-ups upstream ───────
 _CONDENSE_SYSTEM = """You are a query-rewriting component in an academic advising
