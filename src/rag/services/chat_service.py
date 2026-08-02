@@ -219,7 +219,7 @@ def process_message(session: ChatSession, user_message: str) -> str:
     while not done:
         try:
             resp_obj = groq_client.chat.completions.create(
-                model="qwen/qwen3-32b", messages=prompts, tools=tools, temperature=0.1
+                model="qwen/qwen3.6-27b", messages=prompts, tools=tools, temperature=0.1
             )
         except APIStatusError as e:
             resp_obj = github_client.chat.completions.create(

@@ -116,10 +116,13 @@ weights/
 # ─────────────────────────────────────────────────────────────────────
 # Vector Database
 # ─────────────────────────────────────────────────────────────────────
-chroma_db/
+# chroma_db/
 chromadb/
 *.chroma
 faiss_index/
+# Ship the ChromaDB knowledge base — its HNSW index files end in .bin,
+# which the "*.bin" model-file rule above would otherwise ignore.
+!data/chroma_db/**
 
 # ─────────────────────────────────────────────────────────────────────
 # Logs and Outputs
