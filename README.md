@@ -11,8 +11,9 @@
 
 The Smart Advisor is a graduation project that helps students who just graduated from high school get instant, accurate advice about the Data Science and AI specialization at UCAS — admission requirements, study plan, career paths, and scholarships. Unlike generic AI tools (ChatGPT, Gemini), our system grounds every answer in **official UCAS documents** — eliminating hallucination — and supports both **text and Arabic voice** input.
 
-**Phase 1 (Complete):** Research, literature review, methodology design.
-**Phase 2 (Complete):** Implementation, evaluation, and deployment. The system is fully built, tested, and merged into `main`.
+**Phase 1 (Completed):** Research, literature review, methodology design.
+
+**Phase 2 (Completed):** Implementation, evaluation, and deployment. The system is fully built, tested, and merged into `main`.
 
 ---
 
