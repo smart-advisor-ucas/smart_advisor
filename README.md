@@ -2,17 +2,17 @@
 
 > A voice-enabled Arabic RAG-based academic advisor for new and prospective Data Science and AI students at the University College of Applied Sciences (UCAS).
 
-[![Status](https://img.shields.io/badge/status-Phase%202%20In%20Progress-blue)]()
+[![Status](https://img.shields.io/badge/status-Completed-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 [![Python](https://img.shields.io/badge/python-3.10+-blue)]()
 
 ---
 ## 📖 About
 
-The Smart Advisor is a graduation project that helps DS/AI students at UCAS get instant, accurate answers to their academic questions. Unlike generic AI tools (ChatGPT, Gemini), our system grounds every answer in **official UCAS documents** — eliminating hallucination — and supports both **text and Arabic voice** input.
+The Smart Advisor is a graduation project that helps students who just graduated from high school get instant, accurate advice about the Data Science and AI specialization at UCAS — admission requirements, study plan, career paths, and scholarships. Unlike generic AI tools (ChatGPT, Gemini), our system grounds every answer in **official UCAS documents** — eliminating hallucination — and supports both **text and Arabic voice** input.
 
 **Phase 1 (Complete):** Research, literature review, methodology design.
-**Phase 2 (In Progress):** Implementation, evaluation, and deployment.
+**Phase 2 (Complete):** Implementation, evaluation, and deployment. The system is fully built, tested, and merged into `main`.
 
 ---
 
@@ -38,10 +38,10 @@ Every step is grounded in official UCAS documents stored in a vector database (C
 
 | Member | Role | Focus |
 |---|---|---|
-| **Fatema Alhabbash** | Project Lead + Backend Architect | RAG Pipeline · LLM Integration |
-| **Roaa Alhaddad** | Data Engineer | Document Processing · Embeddings · ChromaDB |
-| **Saja Abdalaal** | Voice & NLP Engineer | STT · TTS · NLP Preprocessing |
-| **Shahd Ethalathini** | Frontend + Evaluation Lead | UI · Metrics · Testing |
+| **Fatema Alhabbash** | Project Lead + Backend Architect | RAG pipeline · retrieval logic · LLM integration · fallback mechanism |
+| **Roaa Alhaddad** | Data Engineer | Data collection for the knowledge base · FAQ surveys · document processing |
+| **Saja Abdalaal** | Voice & NLP Engineer | STT · TTS · NLP preprocessing |
+| **Shahd Ethalathini** | Frontend + Knowledge Base Engineer | UI · KB chunking · embedding generation · storing embeddings in ChromaDB |
 
 **Supervisor:** Dr. Sanaa Al-Sayegh
 **Institution:** University College of Applied Sciences — Gaza
@@ -55,10 +55,10 @@ smart-advisor/
 ├── docs/                    Documentation, reports, meeting notes
 ├── data/                    Raw and processed data (mostly gitignored)
 ├── src/
-│   ├── knowledge_base/      Document processing → embeddings → ChromaDB
+│   ├── knowledge_base/      Document processing → chunking → embeddings → ChromaDB
 │   ├── rag/                 Retrieval and generation pipeline
 │   ├── voice/               STT and TTS modules
-│   ├── ui/                  Streamlit/Gradio interface
+│   ├── ui/                  FastAPI backend + Gradio interface
 │   └── utils/               Shared helpers (logging, config)
 ├── notebooks/               Jupyter experiments
 ├── tests/                   Automated tests
@@ -101,44 +101,37 @@ smart-advisor/
    # Open .env and fill in your API keys
    ```
 
-5. **Run the app**
+5. **Run the backend**
    ```bash
-   streamlit run src/ui/app.py
+   uvicorn src.main:app --reload --port 8000
    ```
+   Swagger docs are available at `http://127.0.0.1:8000/docs`.
+
+6. **Run the interface**
+   ```bash
+   python src/ui/app.py
+   ```
+   The Gradio interface talks to the backend over the `/chat`, `/chat/reset`, and `/chat/history/{session_id}` endpoints.
 
 ---
 
-## 🌳 Branch Strategy
-
+## Branch Strategy
+ 
 We use a simple branching model:
-
+ 
 - **`main`** — protected, only updated via pull requests
-- **`dev`** — integration branch where features merge first
-- **`feature/<name>`** — your working branch for any new work
-
-**Workflow:**
-1. Create your feature branch: `git checkout -b feature/stt-whisper-integration`
-2. Commit your changes locally
-3. Push to GitHub: `git push -u origin feature/stt-whisper-integration`
-4. Open a Pull Request to `dev`
-5. Get at least one teammate's review
-6. Merge to `dev`
-7. When `dev` is stable, merge to `main`
-
-**Never push directly to `main` or `dev`.**
-
+- **`integration/merge-all`** — integration branch where all feature branches merge first
+- **`feature/rag`** — backend RAG pipeline work
+- **`feature/frontend-ui`** — UI work
+- **`feature/voice`** — STT/TTS work
+  
 ---
 
-## 📝 Commit Message Convention
+## ✅ Testing
 
-Use clear, prefixed commit messages:
-
-- `feat:` new feature (e.g., `feat: add Whisper STT integration`)
-- `fix:` bug fix (e.g., `fix: handle empty audio input gracefully`)
-- `docs:` documentation only (e.g., `docs: update README setup steps`)
-- `test:` add or update tests
-- `refactor:` code restructuring without behavior change
-- `chore:` housekeeping (dependencies, config, etc.)
+- **Unit testing** was carried out at the end of each development phase, on each component in isolation (retrieval, metadata filtering, fallback logic, profile extraction, etc.) before it was merged.
+- **Integration/overall testing** was performed after all feature branches (`feature/rag`, `feature/frontend-ui`, `feature/voice`) were merged into `main`, to validate the end-to-end flow from onboarding through retrieval to fallback escalation.
+- Test cases and results are tracked under `tests/`.
 
 ---
 
@@ -158,7 +151,7 @@ This project is licensed under the MIT License — see [LICENSE](LICENSE) for de
 
 ## 🙏 Acknowledgments
 
-- Dr. Sanaa Al-Sayegh, our supervisor, for invaluable guidance throughout Phase 1.
+- Dr. Sanaa Al-Sayegh, our supervisor, for invaluable guidance throughout the project.
 - The Department of Computer Engineering at UCAS for academic support.
 - The open-source NLP community whose tools make this project possible.
 
