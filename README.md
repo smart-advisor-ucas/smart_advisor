@@ -7,7 +7,6 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)]()
 
 ---
-
 ## 📖 About
 
 The Smart Advisor is a graduation project that helps DS/AI students at UCAS get instant, accurate answers to their academic questions. Unlike generic AI tools (ChatGPT, Gemini), our system grounds every answer in **official UCAS documents** — eliminating hallucination — and supports both **text and Arabic voice** input.
