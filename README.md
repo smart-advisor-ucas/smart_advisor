@@ -53,7 +53,7 @@ Every step is grounded in official UCAS documents stored in a vector database (C
 
 ```
 smart-advisor/
-├── docs/                    Documentation, reports, meeting notes
+├── docs/                    Documentation, reports
 ├── data/                    Raw and processed data (mostly gitignored)
 ├── src/
 │   ├── knowledge_base/      Document processing → chunking → embeddings → ChromaDB
@@ -81,7 +81,7 @@ smart-advisor/
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/[YOUR-ORG-NAME]/smart-advisor.git
+   git clone https://github.com/smart-advisor-ucas/smart_advisor.git
    cd smart-advisor
    ```
 
@@ -101,18 +101,23 @@ smart-advisor/
    cp .env.example .env
    # Open .env and fill in your API keys
    ```
+5. **Add the ChromaDB knowledge base**
+   The `data/chroma_db/` folder is **not tracked in GitHub** (it's git-ignored). Create it and populate it before running the backend.
+   Without this step, the backend will start but retrieval will fail because the collection won't exist.
 
-5. **Run the backend**
+7. **Run the backend**
    ```bash
-   uvicorn src.main:app --reload --port 8000
+   uvicorn src.ui.main:app --reload --port 8000
    ```
    Swagger docs are available at `http://127.0.0.1:8000/docs`.
 
 6. **Run the interface**
    ```bash
-   python src/ui/app.py
+   cd src/ui/frontend
+   npm install
+   npm run dev
    ```
-   The Gradio interface talks to the backend over the `/chat`, `/chat/reset`, and `/chat/history/{session_id}` endpoints.
+   The React frontend talks to the backend over the `/chat`, `/chat/reset`, and `/chat/history/{session_id}` endpoints.
 
 ---
 
