@@ -2,9 +2,9 @@
 
 > A voice-enabled Arabic RAG-based academic advisor for new and prospective Data Science and AI students at the University College of Applied Sciences (UCAS).
 
-[![Status](https://img.shields.io/badge/status-Completed-brightgreen)]()
-[![License](https://img.shields.io/badge/license-MIT-green)]()
-[![Python](https://img.shields.io/badge/python-3.10+-blue)]()
+![Status](https://img.shields.io/badge/status-Completed-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Python](https://img.shields.io/badge/python-3.10+-blue)
 
 ---
 ## 📖 About
@@ -140,7 +140,6 @@ We use a simple branching model:
 
 - [Phase 1 Report](docs/phase1_report.pdf)
 - [Architecture Overview](docs/architecture.md)
-- [Meeting Notes](docs/meeting_notes/)
 
 ---
 
