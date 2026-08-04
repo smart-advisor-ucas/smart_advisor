@@ -39,7 +39,7 @@ Every step is grounded in official UCAS documents stored in a vector database (C
 
 | Member | Role | Focus |
 |---|---|---|
-| **Fatema Alhabbash** | Project Lead + Backend Architect | RAG pipeline · retrieval logic · LLM integration · fallback mechanism |
+| **Fatma Alzahraa Alhabbash** | Project Lead + Backend Architect | RAG pipeline · retrieval logic · LLM integration · fallback mechanism |
 | **Roaa Alhaddad** | Data Engineer | Data collection for the knowledge base · FAQ surveys · document processing |
 | **Saja Abdalaal** | Voice & NLP Engineer | STT · TTS · NLP preprocessing |
 | **Shahd Ethalathini** | Frontend + Knowledge Base Engineer | UI · KB chunking · embedding generation · storing embeddings in ChromaDB |
