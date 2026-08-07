@@ -413,15 +413,15 @@ export default function App() {
     <div className={`app ${darkMode ? 'dark' : ''}`}>
 
       <header className="header">
-        <div className="header-top">
-          <img
-            src="https://upload.wikimedia.org/wikipedia/commons/5/58/%D8%B4%D8%B9%D8%A7%D8%B1_%D8%A7%D9%84%D9%83%D9%84%D9%8A%D8%A9_%D8%A7%D9%84%D8%AC%D8%A7%D9%85%D8%B9%D9%8A%D8%A9_.jpg"
-            alt="UCAS"
-            className="header-logo-img"
-          />
-          <h1 className="header-title">Data Science and Artificial Intelligence Smart Advisor</h1>
+        <img
+          src="https://upload.wikimedia.org/wikipedia/commons/5/58/%D8%B4%D8%B9%D8%A7%D8%B1_%D8%A7%D9%84%D9%83%D9%84%D9%8A%D8%A9_%D8%A7%D9%84%D8%AC%D8%A7%D9%85%D8%B9%D9%8A%D8%A9_.jpg"
+          alt="UCAS"
+          className="header-logo-img"
+        />
+        <div className="header-titles">
+          <h1 className="header-title">المستشار الأكاديمي الذكي</h1>
+          <p className="header-subtitle">Data Science &amp; Artificial Intelligence · UCAS</p>
         </div>
-        <p className="header-subtitle">المستشار الأكاديمي الذكي</p>
         <div className="header-actions">
           <button className="theme-toggle" onClick={() => setDarkMode(prev => !prev)}>
             {darkMode ? '☀️ فاتح' : '🌙 داكن'}
@@ -433,16 +433,6 @@ export default function App() {
       </header>
 
       <main className="messages-area">
-
-        {messages.length === 1 && (
-          <div className="suggestions">
-            {SUGGESTIONS.map((s, i) => (
-              <button key={i} className="suggestion-chip" onClick={() => sendMessage(s)}>
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
 
         {messages.map((msg, i) => (
           <div key={i} className={`message-row ${msg.role}`}>
@@ -504,6 +494,16 @@ export default function App() {
                 window._currentRecorder.stop();
               }
             }}>إيقاف</button>
+          </div>
+        )}
+
+        {messages.length <= 1 && (
+          <div className="suggestions">
+            {SUGGESTIONS.map((s, i) => (
+              <button key={i} className="suggestion-chip" onClick={() => sendMessage(s)}>
+                {s}
+              </button>
+            ))}
           </div>
         )}
 
