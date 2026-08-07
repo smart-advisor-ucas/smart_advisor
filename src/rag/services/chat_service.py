@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 import threading
 
 from groq import APIStatusError
-from src.utils.config import github_client, groq_client
+from src.utils.config import openrouter_client, groq_client
 from src.rag.memory import (
     get_empty_memory, save_to_memory, history_as_messages,
     strip_personalization_tail, _save_to_memory_background,
@@ -68,8 +68,8 @@ def _extract_student_info(user_message: str, student: StudentContact) -> Student
     """Try to extract name/email/phone from the student's message."""
     import json as _json
     try:
-        resp = github_client.chat.completions.create(
-            model="gpt-4o-mini",
+        resp = openrouter_client.chat.completions.create(
+            model="openai/gpt-4o-mini",
             messages=[
                 {"role": "system", "content": (
                     "Extract student contact details from the message if present."
@@ -222,8 +222,8 @@ def process_message(session: ChatSession, user_message: str) -> str:
                 model="qwen/qwen3-32b", messages=prompts, tools=tools, temperature=0.1
             )
         except APIStatusError as e:
-            resp_obj = github_client.chat.completions.create(
-                model="gpt-4o-mini", messages=prompts, tools=tools, temperature=0.1
+            resp_obj = openrouter_client.chat.completions.create(
+                model="openai/gpt-4o-mini", messages=prompts, tools=tools, temperature=0.1
             )
 
         finish_reason = resp_obj.choices[0].finish_reason

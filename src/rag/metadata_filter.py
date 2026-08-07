@@ -7,7 +7,7 @@ import re
 
 from langchain_classic.memory import ConversationBufferWindowMemory
 
-from src.utils.config import github_client
+from src.utils.config import openrouter_client
 
 # Known program names in the DB (must match metadata exactly)
 KNOWN_PROGRAMS = [
@@ -206,8 +206,8 @@ def detect_metadata_filter(query: str, memory: "ConversationBufferWindowMemory |
     """
 
     try:
-        resp = github_client.chat.completions.create(
-            model="gpt-4o-mini",
+        resp = openrouter_client.chat.completions.create(
+            model="openai/gpt-4o-mini",
             messages=[
                 {"role": "system", "content": _FILTER_SYSTEM},
                 {"role": "user",   "content": query}

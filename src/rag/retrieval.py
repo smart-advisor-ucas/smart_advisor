@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from langchain_classic.memory import ConversationBufferWindowMemory
 
 from src.utils.config import (
-    github_client, SIMILARITY_THRESHOLD, TOP_K,
+    openrouter_client, SIMILARITY_THRESHOLD, TOP_K,
     MAX_CHUNKS, MAX_CONTEXT_TOKENS, QUERY_VARIANTS_N,
 )
 from src.rag.metadata_filter import detect_metadata_filter
@@ -53,8 +53,8 @@ Correct format: ["query 1", "query 2", "query 3"]"""},
     ]
 
     try:
-        resp = github_client.chat.completions.create(
-            model="gpt-4o-mini", messages=prompt, temperature=0.7, max_tokens=300
+        resp = openrouter_client.chat.completions.create(
+            model="openai/gpt-4o-mini", messages=prompt, temperature=0.7, max_tokens=300
         )
         raw = resp.choices[0].message.content.strip()
         raw = re.sub(r"```json|```", "", raw).strip()
@@ -414,8 +414,8 @@ def condense_followup_question(user_message: str, memory: ConversationBufferWind
         for m in chat_history[-4:]
     ]
     try:
-        resp = github_client.chat.completions.create(
-            model="gpt-4o-mini",
+        resp = openrouter_client.chat.completions.create(
+            model="openai/gpt-4o-mini",
             messages=[
                 {"role": "system", "content": _CONDENSE_SYSTEM},
                 *history_msgs,

@@ -16,19 +16,19 @@ load_dotenv(dotenv_path=_ENV_PATH, override=True)
 HF_KEY           = os.getenv("HF_TOKEN")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID  = os.getenv("TELEGRAM_CHAT_ID")
-GITHUB_TOKEN      = os.getenv("GITHUB_TOKEN")
 GROQ_API_KEY       = os.getenv("GROQ_API_KEY") 
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-if not GITHUB_TOKEN:
-    raise ValueError("GITHUB_TOKEN is missing. Add it to .env and re-run.")
+if not OPENROUTER_API_KEY:
+    raise ValueError("OPENROUTER_API_KEY is missing. Add it to .env and re-run.")
 
 if not GROQ_API_KEY:                                     # NEW
     raise ValueError("GROQ_API_KEY is missing. Add it to .env and re-run.")
 
 # ── Shared LLM client (GitHub Models API) ──────────────────────────────────
-github_client = OpenAI(
-    base_url="https://models.github.ai/inference",
-    api_key=GITHUB_TOKEN,
+openrouter_client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_API_KEY,
 )
 
 groq_client   = Groq(api_key=GROQ_API_KEY)
