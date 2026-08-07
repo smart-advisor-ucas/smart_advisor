@@ -5,7 +5,7 @@ small talk) vs. a real academic question needing retrieval.
 import json
 import re
 
-from src.utils.config import github_client, groq_client
+from src.utils.config import openrouter_client, groq_client
 
 _CONVERSATIONAL_PATTERNS = [
     "شكرا", "شكراً", "تمام", "ماشي", "مرحبا", "أهلا", "اهلا", "يسلمو",
@@ -103,7 +103,7 @@ Rules:
     except Exception as e:
         print(f"[is_conversational/Groq error] {e} — falling back to gpt-4o-mini")
         try:
-            result = _try(github_client, "gpt-4o-mini")
+            result = _try(openrouter_client, "openai/gpt-4o-mini")
         except Exception as e2:
             print(f"[is_conversational/fallback error] {e2} — treating as real question")
             return False, None   # ← this is the line that actually prevents the crash

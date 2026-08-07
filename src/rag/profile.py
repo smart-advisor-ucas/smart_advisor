@@ -4,7 +4,7 @@ Student profile extraction (LLM-based) and the onboarding question sequencer.
 import json
 import re
 
-from src.utils.config import groq_client          
+from src.utils.config import groq_client, openrouter_client     
 from src.utils.schemas import StudentProfile
 
 _EXTRACTION_SYSTEM = """
