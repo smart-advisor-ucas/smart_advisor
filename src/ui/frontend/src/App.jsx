@@ -2,7 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
 
-const API_URL = 'http://127.0.0.1:8000';
+// Same-origin in production (FastAPI serves the built bundle); the Vite dev
+// server proxies these paths to the local backend (see vite.config.js).
+const API_URL = '';
 
 const SUGGESTIONS = [
   'ايش شروط المنح الدراسية؟',

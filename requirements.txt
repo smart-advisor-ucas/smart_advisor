@@ -1,3 +1,6 @@
+# CPU-only torch wheels (the HF Space is CPU-only; avoids ~2 GB of CUDA libs)
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi
 uvicorn[standard]
 pydantic
@@ -18,3 +21,11 @@ google-generativeai
 azure-ai-inference
 azure-core
 gradio
+
+# Voice layer (STT: Whisper via transformers, TTS: Piper/Azure)
+torch==2.9.1+cpu
+transformers==4.57.3
+piper-tts==1.4.2
+mishkal==0.4.1
+soundfile==0.14.0
+azure-cognitiveservices-speech==1.50.0
