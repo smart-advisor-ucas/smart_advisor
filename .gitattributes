@@ -1,0 +1,2 @@
+data/chroma_db/**/*.bin filter=lfs diff=lfs merge=lfs -text
+data/chroma_db/*.sqlite3 filter=lfs diff=lfs merge=lfs -text
