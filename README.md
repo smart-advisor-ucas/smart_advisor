@@ -62,8 +62,6 @@ smart-advisor/
 │   ├── ui/                  FastAPI backend + Gradio interface
 │   └── utils/               Shared helpers (logging, config)
 ├── notebooks/               Jupyter experiments
-├── tests/                   Automated tests
-└── scripts/                 One-off setup scripts
 ```
 
 ---
