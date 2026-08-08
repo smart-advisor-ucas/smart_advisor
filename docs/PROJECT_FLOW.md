@@ -21,24 +21,13 @@ flowchart LR
     UI2 --> E(["✅ Student hears/reads the answer"])
 ```
 
-The **UI (Shahd)** wraps the whole loop — it captures the recording at the start and plays
+The **UI** wraps the whole loop — it captures the recording at the start and plays
 the result at the end. Everything in between is one pillar handing a plain value to the next:
 audio → text → answer text → audio.
 
-## Who owns what
-
-| Pillar | Owner | Input | Output |
-|---|---|---|---|
-| **UI** | Shahd | student's mic input / typed question | played audio + displayed answer |
-| **Voice — STT** | Saja | raw audio (file path, bytes, or waveform) | `TranscriptionResult` → MSA question text |
-| **RAG** | Fatema | MSA question text | MSA answer text, grounded in retrieved documents |
-| **Voice — TTS** | Saja | MSA answer text | `SynthesisResult` → spoken `.wav` file |
-| **Knowledge Base** | Roaa | official UCAS documents | embeddings / ChromaDB index that RAG queries |
-
 ## How the pieces connect
 
-The voice layer is exactly two functions. Everything Fatema and Shahd need is these two calls
-plus one exception type to catch:
+The voice layer is exactly two functions.
 
 ```python
 from voice import transcribe_audio, synthesize_speech, VoiceError
@@ -58,10 +47,6 @@ def voice_loop(audio):
     except VoiceError:
         return None, answer_text   # still show the text even if TTS failed
 ```
-
-Shahd's UI supplies `audio` (whatever the browser/mic records) at the start, and plays
-`speech.audio_path` at the end. Nothing in between needs to know it's Arabic, or whether
-it's running mock or real — that's the voice layer's job.
 
 ## Mock mode vs real mode
 
@@ -86,7 +71,5 @@ it's running mock or real — that's the voice layer's job.
 
 ## Want more detail?
 
-- [`src/voice/CONTRACT.md`](../src/voice/CONTRACT.md) — the full frozen integration contract:
-  exact signatures, every exception type, mock-vs-real reference table.
 - [`docs/voice_usage_guide.ipynb`](voice_usage_guide.ipynb) — a runnable, teaching notebook:
   the same examples above, plus async variants and picking a male/female voice.
