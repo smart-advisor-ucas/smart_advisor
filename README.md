@@ -1,13 +1,3 @@
----
-title: Smart Advisor
-emoji: 🎓
-colorFrom: blue
-colorTo: green
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # Smart Advisor for DS and AI Students
 
 > A voice-enabled Arabic RAG-based academic advisor for new and prospective Data Science and AI students at the University College of Applied Sciences (UCAS).
