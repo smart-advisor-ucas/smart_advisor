@@ -161,7 +161,7 @@ def process_message(session: ChatSession, user_message: str) -> str:
         still_missing = session.student.missing()
         if still_missing:
             session.awaiting_info = True
-            pending_question = resolved_message
+            session.pending_question = resolved_message
             response = (
                 "لا تتوفر لديّ معلومات كافية للإجابة على هذا السؤال.\n"
                 + ("سأحيل سؤالك إلى المرشد الأكاديمي. ما اسمك الكريم؟"
@@ -233,7 +233,7 @@ def process_message(session: ChatSession, user_message: str) -> str:
             still_missing = session.student.missing()
             if still_missing:
                 session.awaiting_info = True
-                pending_question = resolved_message
+                session.pending_question = resolved_message
                 response = (
                     "لا تتوفر لديّ معلومات كافية للإجابة على هذا السؤال.\n"
                     + ("سأحيل سؤالك إلى المرشد الأكاديمي. ما اسمك الكريم؟"

@@ -11,16 +11,17 @@ huggingface_hub
 numpy
 langchain-classic
 requests
-pypdf
+# pypdf
 langchain-text-splitters
 langchain-core
-sentence-transformers
+# sentence-transformers
 huggingface-hub
 groq
-google-generativeai
-azure-ai-inference
-azure-core
-gradio
+python-multipart
+# google-generativeai
+# azure-ai-inference
+# azure-core
+# gradio
 
 # Voice layer (STT: Whisper via transformers, TTS: Piper/Azure)
 torch==2.9.1+cpu
