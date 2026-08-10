@@ -396,6 +396,36 @@ body:has(.app.dark) { background: #0D1117; }
   50%       { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
 }
 
+.mic-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+  transform: none;
+}
+
+/* ── mic transcribing spinner ── */
+.mic-btn-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.mic-spinner {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.5);
+  border-top-color: #fff;
+  animation: mic-spin 0.7s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes mic-spin {
+  to { transform: rotate(360deg); }
+}
+
 .send-btn { background: var(--ucas-blue); color: white; }
 .send-btn:hover { background: var(--ucas-blue-mid); transform: scale(1.05); }
 .send-btn:disabled { background: var(--border); cursor: not-allowed; transform: none; }

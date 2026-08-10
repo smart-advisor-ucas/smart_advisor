@@ -5,6 +5,7 @@ system can't answer a question, and the LLM tool schema used to trigger this.
 import json
 import time
 from datetime import datetime
+import threading
 
 import requests
 from requests.exceptions import ReadTimeout, ConnectionError
@@ -39,7 +40,7 @@ def send_fallback_telegram(student: dict, question: str) -> bool:
     max_retries = 3                                  # NEW — retry with backoff
     for attempt in range(max_retries):
         try:
-            resp = requests.post(url, json=payload, timeout=15)   # CHANGED — was 10
+            resp = requests.post(url, json=payload, timeout=60)   
             result = resp.json()
             if result.get("ok"):
                 return True
@@ -61,18 +62,34 @@ def send_fallback_telegram(student: dict, question: str) -> bool:
 
     return False
 
+def _send_fallback_background(student: dict, question: str) -> None:
+    """
+    Runs in a background thread: does the actual Telegram send (with its
+    internal retries/backoff, now up to 60s per attempt) and, on failure,
+    writes to the local backup log. Never touches the request/response path,
+    so a slow or unresponsive Telegram API never delays the reply to the
+    student or blocks the processing of their next question.
+    """
+    success = send_fallback_telegram(student, question)
+    if not success:                                  # local backup log
+        with open("failed_questions.log", "a", encoding="utf-8") as f:
+            f.write(
+                f"\n---\nTime: {datetime.now()}\n"
+                f"Name: {student.get('name')}\n"
+                f"Email: {student.get('email')}\n"
+                f"Phone: {student.get('phone')}\n"
+                f"Question: {question}\n"
+            )
 
 def record_unknown_question(question: str, name: str, email: str = None, phone: str = None) -> dict:
     student = {"name": name, "email": email, "phone": phone}
-    success = send_fallback_telegram(student, question)
-    status = "ok" if success else "failed"
+    threading.Thread(
+        target=_send_fallback_background,
+        args=(student, question),
+        daemon=True,
+    ).start()
 
-    if not success:                                  # NEW — local backup log
-        with open("failed_questions.log", "a", encoding="utf-8") as f:
-            f.write(f"\n---\nTime: {datetime.now()}\nName: {name}\nEmail: {email}\nPhone: {phone}\nQuestion: {question}\n")
-
-    return {"recorded": status}
-
+    return {"recorded": "pending"}
 
 # ── LLM tool schema ──────────────────────────────────────────────────────
 record_unknown_question_json = {

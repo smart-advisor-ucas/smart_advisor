@@ -248,7 +248,8 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput]         = useState('');
   const [loading, setLoading]     = useState(false);
-  const [recording, setRecording] = useState(false);
+  const [recording, setRecording]       = useState(false);
+  const [transcribing, setTranscribing] = useState(false); // NEW — true while audio is being sent/transcribed
   const [error, setError]         = useState('');
   const [darkMode, setDarkMode]   = useState(false);
   const bottomRef                 = useRef(null);
@@ -359,6 +360,8 @@ export default function App() {
   };
 
   const toggleRecording = () => {
+    if (transcribing) return; // NEW — ignore clicks while a previous recording is still being processed
+
     if (recording) {
       if (window._currentRecorder?.state === 'recording') {
         window._currentRecorder.stop();
@@ -376,12 +379,17 @@ export default function App() {
       recorder.ondataavailable = e => chunks.push(e.data);
 
       recorder.onstop = async () => {
+        setRecording(false);
+        stream.getTracks().forEach(t => t.stop());
+        window._currentRecorder = null;
+
         const blob = new Blob(chunks, { type: 'audio/webm' });
         const userAudioUrl = URL.createObjectURL(blob);
 
         const formData = new FormData();
         formData.append('audio', blob, 'audio.webm');
 
+        setTranscribing(true); // NEW — block the mic button while the audio is uploading/transcribing
         try {
           const res = await axios.post(`${API_URL}/voice/transcribe`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
@@ -393,11 +401,9 @@ export default function App() {
           }
         } catch {
           setError('تعذّر تحويل الصوت إلى نص');
+        } finally {
+          setTranscribing(false); // NEW — re-enable the mic button whether it succeeded or failed
         }
-
-        setRecording(false);
-        stream.getTracks().forEach(t => t.stop());
-        window._currentRecorder = null;
       };
 
       recorder.start();
@@ -508,13 +514,17 @@ export default function App() {
         )}
 
         <div className="input-row">
-          <button
-            className={`mic-btn ${recording ? 'recording' : ''}`}
-            onClick={toggleRecording}
-            title="تسجيل صوتي"
-          >
-            🎙️
-          </button>
+          <div className="mic-btn-wrap">
+            <button
+              className={`mic-btn ${recording ? 'recording' : ''}`}
+              onClick={toggleRecording}
+              disabled={transcribing}
+              title={transcribing ? 'جاري معالجة الصوت...' : 'تسجيل صوتي'}
+            >
+              🎙️
+            </button>
+            {transcribing && <span className="mic-spinner" aria-label="جاري معالجة الصوت" />}
+          </div>
           <input
             ref={inputRef}
             className="text-input"
