@@ -16,6 +16,7 @@ load_dotenv(dotenv_path=_ENV_PATH, override=True)
 HF_KEY           = os.getenv("HF_TOKEN")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID  = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_API_BASE = os.getenv("TELEGRAM_API_BASE", "https://api.telegram.org")
 GROQ_API_KEY       = os.getenv("GROQ_API_KEY") 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
