@@ -191,6 +191,30 @@ def _category_and_programs_filter(category: str, programs: list[str]) -> dict:
     prog_f = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
     return {"$and": [{"category": category}, prog_f]}
 
+def _related_faq_filter(category: str, programs: list[str]) -> dict:
+    """
+    FAQ paragraphs are sometimes hand-tagged as relevant to a specific
+    category even though their own stored category is "faq" (e.g. a
+    paragraph discussing course load lives under category=faq but carries
+    "study_plan_related": true — see build_chunks_from_ucas in the
+    ingestion notebook). Whenever a category filter fires, we ALSO pull
+    in any faq chunk carrying "<category>_related": true for the same
+    program(s), so advisory FAQ content isn't silently dropped just
+    because it's stored under category="faq" instead of e.g. "study_plan".
+
+    Today only "study_plan_related" actually exists in the source data
+    (tagged on 8 paragraphs, only for علم البيانات والذكاء الاصطناعي).
+    Other categories will simply match zero chunks until similar tags get
+    added in the ingestion notebook — that's expected, not a bug: this
+    stays a safe no-op for untagged categories rather than crashing.
+    """
+    prog_f = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
+    return {"$and": [
+        {"category": "faq"},
+        {f"{category}_related": True},
+        prog_f
+    ]}
+
 def detect_metadata_filter(query: str, memory: "ConversationBufferWindowMemory | None" = None) -> dict | None:
     """
     Returns (filters, programs, course_codes, course_names) where `filters`
@@ -270,11 +294,18 @@ def detect_metadata_filter(query: str, memory: "ConversationBufferWindowMemory |
                     "category": category,
                     "where": _category_and_programs_filter(category, p)
                 })
+                # Pull in any FAQ paragraph hand-tagged as relevant to this
+                # category too, so advisory content isn't left out just
+                # because it's stored under category="faq" (see docstring
+                # on _related_faq_filter — currently only fires for
+                # study_plan, and that's expected given the source data).
+                filters.append({
+                    "category": f"{category}_faq",
+                    "where": _related_faq_filter(category, p)
+                })
     
         return filters, programs, course_codes, course_names
     
     except Exception as e:
         print(f"[Filter detection error] {e}")
         return [], [], [], []
- 
- 

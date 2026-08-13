@@ -219,7 +219,7 @@ def process_message(session: ChatSession, user_message: str) -> str:
     while not done:
         try:
             resp_obj = groq_client.chat.completions.create(
-                model="qwen/qwen3.6-27b", messages=prompts, tools=tools, temperature=0.1
+                model="qwen/qwen3-32b", messages=prompts, tools=tools, temperature=0.1
             )
         except APIStatusError as e:
             resp_obj = openrouter_client.chat.completions.create(
@@ -229,7 +229,16 @@ def process_message(session: ChatSession, user_message: str) -> str:
         finish_reason = resp_obj.choices[0].finish_reason
         message = resp_obj.choices[0].message
 
-        if finish_reason == "tool_calls":
+        # ── DEBUG: temporary — remove once root cause confirmed ──────────
+        print(f"[Layer2 DEBUG] finish_reason={finish_reason!r}")
+        print(f"[Layer2 DEBUG] message.content={message.content!r}")
+        print(f"[Layer2 DEBUG] message.tool_calls={getattr(message, 'tool_calls', None)!r}")
+        reasoning = getattr(message, "reasoning", None) or getattr(message, "reasoning_content", None)
+        if reasoning:
+            print(f"[Layer2 DEBUG] message.reasoning present, len={len(reasoning)}")
+        # ───────────────────────────────────────────────────────────────
+
+        if finish_reason == "tool_calls" or (not message.content and getattr(message, "tool_calls", None)):
             still_missing = session.student.missing()
             if still_missing:
                 session.awaiting_info = True
@@ -251,6 +260,37 @@ def process_message(session: ChatSession, user_message: str) -> str:
             done = True
         else:
             response = message.content
+            if not response:
+                # Defensive guard: some providers/models (esp. reasoning models
+                # like qwen3 via Groq) can return finish_reason != "tool_calls"
+                # with an empty/None content — e.g. the actual answer landed in
+                # a separate reasoning/reasoning_content field instead of
+                # message.content. Silently returning None/"" here is what
+                # produces the empty bubble in the UI. Treat it as a hard
+                # failure and fall back rather than surfacing nothing.
+                print(
+                    "[Layer2 WARNING] empty message.content with "
+                    f"finish_reason={finish_reason!r} — falling back to "
+                    "insufficient-info response instead of returning empty text"
+                )
+                still_missing = session.student.missing()
+                if still_missing:
+                    session.awaiting_info = True
+                    session.pending_question = resolved_message
+                    response = (
+                        "لا تتوفر لديّ معلومات كافية للإجابة على هذا السؤال.\n"
+                        + ("سأحيل سؤالك إلى المرشد الأكاديمي. ما اسمك الكريم؟"
+                           if still_missing == "name"
+                           else "سأحيل سؤالك إلى المرشد الأكاديمي. هل يمكنك تزويدي ببريدك الإلكتروني أو رقم هاتفك؟")
+                    )
+                else:
+                    record_unknown_question(
+                        question=resolved_message,
+                        name=session.student.name,
+                        email=session.student.email,
+                        phone=session.student.phone,
+                    )
+                    response = "لا تتوفر لديّ معلومات كافية للإجابة على هذا السؤال. تم إحالة سؤالك إلى المرشد الأكاديمي وسيتواصل معك قريباً."
             done = True
 
     if not session.awaiting_info:

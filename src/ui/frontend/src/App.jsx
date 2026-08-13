@@ -47,6 +47,136 @@ function cleanMarkdown(text) {
     .trim();
 }
 
+// ── يحوّل ** و ` داخل سطر واحد إلى عناصر JSX (بولد / كود) ──
+function renderInline(text, keyPrefix) {
+  const parts = [];
+  const regex = /(\*\*(.+?)\*\*|`(.+?)`)/g;
+  let lastIndex = 0;
+  let match;
+  let idx = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    if (match[2] !== undefined) {
+      parts.push(<strong key={`${keyPrefix}-b-${idx++}`}>{match[2]}</strong>);
+    } else if (match[3] !== undefined) {
+      parts.push(<code key={`${keyPrefix}-c-${idx++}`}>{match[3]}</code>);
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts.length ? parts : [text];
+}
+
+// ── يحوّل نص الماركداون القادم من الـ backend (##, **, -, 1.) إلى JSX منسّق ──
+// النقاط (- ) اللي تجي مباشرة بعد عنصر مرقّم (1. ) بتنحط كقائمة فرعية جوا
+// نفس عنصر <li>، بدل ما تفتح <ol> جديدة — هيك الترقيم 1،2،3 بضل مستمر
+// ومش بيرجع يبلّش من 1 كل مرة.
+function formatMessage(text) {
+  const lines = text.split('\n');
+  const elements = [];
+
+  let olItems = null; // [{ text, subs: [] }]
+  let ulBuffer = null; // نقاط مستقلة مش تابعة لعنصر مرقّم
+
+  const flushOl = (key) => {
+    if (!olItems || olItems.length === 0) { olItems = null; return; }
+    const items = olItems;
+    elements.push(
+      <ol key={`ol-${key}`} className="msg-list">
+        {items.map((item, idx) => (
+          <li key={idx}>
+            {renderInline(item.text, `oli-${key}-${idx}`)}
+            {item.subs.length > 0 && (
+              <ul className="msg-list msg-sublist">
+                {item.subs.map((sub, sidx) => (
+                  <li key={sidx}>{renderInline(sub, `olis-${key}-${idx}-${sidx}`)}</li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ol>
+    );
+    olItems = null;
+  };
+
+  const flushUl = (key) => {
+    if (!ulBuffer || ulBuffer.length === 0) { ulBuffer = null; return; }
+    const items = ulBuffer;
+    elements.push(
+      <ul key={`ul-${key}`} className="msg-list">
+        {items.map((item, idx) => (
+          <li key={idx}>{renderInline(item, `uli-${key}-${idx}`)}</li>
+        ))}
+      </ul>
+    );
+    ulBuffer = null;
+  };
+
+  const flushAll = (key) => { flushOl(key); flushUl(key); };
+
+  lines.forEach((rawLine, i) => {
+    const line = rawLine.trim();
+
+    if (line === '') {
+      // سطر فاضي = مجرد فراغ بصري، مش نهاية القائمة —
+      // لو سكرنا القائمة هون، أي عنصر مرقّم جاي بعده بيرجع يبلّش من 1
+      return;
+    }
+
+    // عناوين: #, ##, ###...
+    const headerMatch = line.match(/^(#{1,6})\s+(.*)/);
+    if (headerMatch) {
+      flushAll(i);
+      const HeadingTag = `h${Math.min(headerMatch[1].length + 2, 6)}`;
+      elements.push(
+        <HeadingTag key={`h-${i}`} className="msg-heading">
+          {renderInline(headerMatch[2], `h-${i}`)}
+        </HeadingTag>
+      );
+      return;
+    }
+
+    // قوائم مرقّمة: 1. نص  أو  1) نص
+    const numberedMatch = line.match(/^\d+[.)]\s+(.*)/);
+    if (numberedMatch) {
+      flushUl(i); // اقفل أي نقاط مستقلة سابقة غير تابعة لعنصر مرقّم
+      if (!olItems) olItems = [];
+      olItems.push({ text: numberedMatch[1], subs: [] });
+      return;
+    }
+
+    // قوائم نقطية: - نص  أو  * نص
+    const bulletMatch = line.match(/^[-*]\s+(.*)/);
+    if (bulletMatch) {
+      if (olItems && olItems.length > 0) {
+        // النقطة تابعة لآخر عنصر مرقّم (قائمة فرعية)
+        olItems[olItems.length - 1].subs.push(bulletMatch[1]);
+      } else {
+        if (!ulBuffer) ulBuffer = [];
+        ulBuffer.push(bulletMatch[1]);
+      }
+      return;
+    }
+
+    // فقرة عادية
+    flushAll(i);
+    elements.push(
+      <p key={`p-${i}`} className="msg-paragraph">
+        {renderInline(line, `p-${i}`)}
+      </p>
+    );
+  });
+
+  flushAll('end');
+  return elements;
+}
+
 const sessionId = getSessionId();
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -459,9 +589,7 @@ export default function App() {
                 />
               ) : (
                 <div className={`bubble ${msg.role}`}>
-                  {msg.text.split('\n').map((line, j) => (
-                    <p key={j} style={{ margin: j === 0 ? 0 : '4px 0 0' }}>{line}</p>
-                  ))}
+                  {formatMessage(msg.text)}
                 </div>
               )}
               <div className="msg-time">{msg.time}</div>

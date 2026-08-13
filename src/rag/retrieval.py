@@ -69,19 +69,30 @@ def estimate_tokens(text: str) -> int:
     """Rough token estimate without a tokenizer dependency (~2.2 chars/token)."""
     return max(1, int(len(text) / 2.2))
 
-def _related_faq_filter(category: str) -> dict:
+def _build_similarity_metadata_filter(
+    programs: list[str], course_codes: list[str], course_names: list[str]
+) -> dict | None:
     """
-    FAQ paragraphs are sometimes hand-tagged as relevant to a specific
-    category even though their own category is "faq" (e.g. a paragraph
-    discussing course load lives under category=faq but carries
-    "study_plan_related": true). Whenever a category filter fires, we
-    ALSO pull in any faq chunk carrying "<category>_related": true.
- 
-    If that flag doesn't exist yet for a given category (e.g. nobody has
-    tagged any FAQ paragraph as "career_opportunities_related" yet), this
-    where-clause simply matches zero chunks — safe no-op, no crash.
+    Scope a similarity search to the same program/course the LLM already
+    detected for this query, so it stays targeted instead of searching the
+    whole knowledge base. Shared by the plain similarity-search fallback
+    AND the exact-filter supplement search below, so both stay consistent.
     """
-    return {"$and": [{"category": "faq"}, {f"{category}_related": True}]}
+    if course_codes:
+        f = {"course_code": {"$in": course_codes}} if len(course_codes) > 1 else {"course_code": course_codes[0]}
+        if programs:
+            prog_f = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
+            f = {"$and": [f, prog_f]}
+        return f
+    if course_names:
+        f = {"course_name": {"$in": course_names}} if len(course_names) > 1 else {"course_name": course_names[0]}
+        if programs:
+            prog_f = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
+            f = {"$and": [f, prog_f]}
+        return f
+    if programs:
+        return {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
+    return None
 
 def _round_robin_trim(buckets: "dict[str, list[tuple[str, dict]]]", max_context_tokens: int):
     """
@@ -140,13 +151,22 @@ def multi_query_search(
     max_context_tokens: int = MAX_CONTEXT_TOKENS,
 ) -> dict:
     """
-    1. Detect ALL active category filters from the query (not just one).
-    2. Exact-fetch every active filter, PLUS its related FAQ paragraphs
-       (via "<category>_related": true), and merge everything together.
-    3. Only if NONE of the exact filters found anything, fall back to the
+    1. Detect ALL active category filters from the query (not just one) —
+       detect_metadata_filter already includes a "<category>_faq" entry
+       for every category flag that fires, so the FAQ merge happens there,
+       not here (single source of truth, see src/rag/metadata_filter.py).
+    2. Exact-fetch every filter entry and merge everything together.
+    3. If the exact filters found something, ALSO run one lightweight
+       similarity search (same program/course scope) to catch anything
+       genuinely relevant that wasn't captured by the filters — but only
+       to fill leftover token budget, so it never bumps or replaces what
+       the exact filters already guaranteed.
+    4. If NONE of the exact filters found anything, fall back to the
        existing multi-query similarity search (unchanged from before).
     """
     filters, programs, course_codes, course_names = detect_metadata_filter(user_message, memory)
+    print(f"[Multi-Query] filters={[f['category'] for f in filters]} programs={programs} "
+          f"course_codes={course_codes} course_names={course_names}")
  
     if filters:
         # Per-category buckets (not one flat list) so we can round-robin
@@ -160,43 +180,94 @@ def multi_query_search(
             bucket = buckets.setdefault(f["category"], [])
  
             result = search(user_message, where=f["where"], is_exact_fetch=True)
+            n_before = len(bucket)
             if result["has_answer"]:
                 for doc, meta in zip(result["documents"], result["metadatas"]):
                     key = re.sub(r"\s+", "", doc)[:200]
                     if key not in seen_keys:
                         seen_keys.add(key)
                         bucket.append((doc, meta))
+            print(f"  [Filter] category={f['category']!r} -> "
+                  f"{len(result.get('documents', []))} fetched, "
+                  f"{len(bucket) - n_before} new (non-duplicate) added to bucket")
  
-            related = search(user_message, where=_related_faq_filter(f["category"]), is_exact_fetch=True)
-            if related["has_answer"]:
-                for doc, meta in zip(related["documents"], related["metadatas"]):
-                    key = re.sub(r"\s+", "", doc)[:200]
-                    if key not in seen_keys:
-                        seen_keys.add(key)
-                        bucket.append((doc, meta))
+        print(f"[Multi-Query] bucket sizes: {{{', '.join(f'{c}: {len(v)}' for c, v in buckets.items())}}}")
  
         if any(buckets.values()):
             merged_docs, merged_meta, running_tokens = _round_robin_trim(buckets, max_context_tokens)
             print(f"[Multi-Query] {len(filters)} active filter(s) -> {len(merged_docs)} chunks kept "
                   f"across {len(buckets)} categories (~{running_tokens} est. tokens, budget={max_context_tokens})")
+
+            # ── Supplement: exact filters can miss real content that lives
+            # under a category/program combo nobody tagged, or that the LLM's
+            # category detection simply missed. If there's still room in the
+            # token budget, run ONE targeted similarity search (same program/
+            # course scope already detected — no extra LLM call for query
+            # variants, so this stays cheap) to catch anything the filters
+            # missed. This only ADDS chunks into leftover space; it never
+            # evicts or reorders anything the exact filters already
+            # guaranteed above, so existing behavior is unchanged when the
+            # filters already fill (or nearly fill) the budget.
+            if running_tokens < max_context_tokens and len(merged_docs) < max_chunks:
+                sim_filter = _build_similarity_metadata_filter(programs, course_codes, course_names)
+                print(f"[Multi-Query] supplement search: budget has room "
+                      f"({running_tokens}/{max_context_tokens} tokens, "
+                      f"{len(merged_docs)}/{max_chunks} chunks) — running similarity search "
+                      f"with filter={sim_filter}")
+                try:
+                    supplement = search(user_message, top_k=top_k, metadata_filter=sim_filter)
+                except Exception as e:
+                    print(f"[Multi-Query] supplement similarity search failed: {e}")
+                    supplement = None
+
+                added = 0
+                skipped_low_score = 0
+                skipped_duplicate = 0
+                skipped_budget = 0
+                if supplement and supplement.get("has_answer"):
+                    print(f"[Multi-Query] supplement search returned "
+                          f"{len(supplement['documents'])} candidate(s), best_score="
+                          f"{supplement.get('best_score', 0):.4f}")
+                    for doc, meta, score in zip(
+                        supplement["documents"], supplement["metadatas"], supplement["scores"]
+                    ):
+                        if score < SIMILARITY_THRESHOLD:
+                            skipped_low_score += 1
+                            continue
+                        key = re.sub(r"\s+", "", doc)[:200]
+                        if key in seen_keys:
+                            skipped_duplicate += 1
+                            continue
+                        doc_tokens = estimate_tokens(doc)
+                        if running_tokens + doc_tokens > max_context_tokens:
+                            skipped_budget += 1
+                            continue
+                        if len(merged_docs) >= max_chunks:
+                            break
+                        seen_keys.add(key)
+                        merged_docs.append(doc)
+                        merged_meta.append(meta)
+                        running_tokens += doc_tokens
+                        added += 1
+                    print(f"[Multi-Query] supplement result: added={added} "
+                          f"skipped_low_score={skipped_low_score} "
+                          f"skipped_duplicate={skipped_duplicate} "
+                          f"skipped_budget={skipped_budget}")
+                else:
+                    print("[Multi-Query] supplement search found nothing usable")
+            else:
+                print(f"[Multi-Query] supplement search skipped — budget already full "
+                      f"({running_tokens}/{max_context_tokens} tokens, "
+                      f"{len(merged_docs)}/{max_chunks} chunks)")
+
             return {"has_answer": True, "documents": merged_docs, "metadatas": merged_meta, "best_score": 1.0}
  
         print("  [Multi-Query] none of the exact-category filters matched anything — falling back to similarity search")
+    else:
+        print("[Multi-Query] no active category filters — going straight to similarity-search fallback")
  
     # ── Similarity-search fallback: identical to the previous implementation ──
-    metadata_filter = None
-    if course_codes:
-        metadata_filter = {"course_code": {"$in": course_codes}} if len(course_codes) > 1 else {"course_code": course_codes[0]}
-        if programs:
-            prog_f = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
-            metadata_filter = {"$and": [metadata_filter, prog_f]}
-    elif course_names:
-        metadata_filter = {"course_name": {"$in": course_names}} if len(course_names) > 1 else {"course_name": course_names[0]}
-        if programs:
-            prog_f = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
-            metadata_filter = {"$and": [metadata_filter, prog_f]}
-    elif programs:
-        metadata_filter = {"program": {"$in": programs}} if len(programs) > 1 else {"program": programs[0]}
+    metadata_filter = _build_similarity_metadata_filter(programs, course_codes, course_names)
  
     queries = generate_queries(user_message, memory, profile)
     print(f"[Multi-Query] {len(queries)} queries: {queries}")
