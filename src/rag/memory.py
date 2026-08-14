@@ -42,11 +42,29 @@ any section that personalizes the answer to the specific student (GPA checks,
 recommendations, "الاختيار الأمثل" or similar closing recommendations).
 
 Rules:
-- If the answer has NO personalization content at all, return it unchanged.
-- Do NOT summarize or paraphrase the factual content — keep it word-for-word.
+- If the answer has NO personalization content at all, return it UNCHANGED,
+  word-for-word, in full. This is the common case — most answers (e.g. course
+  lists, faculty information, study plans, admission requirements) contain no
+  personalization at all and must come back exactly as given.
+- Removing personalization means deleting a specific sentence or clause that
+  ties information to the individual student. It does NOT mean summarizing,
+  shortening, or omitting factual content that just happens to be near a
+  personalized sentence — keep everything else word-for-word.
+- Example: a question about faculty members with their names, ranks, and
+  specializations has NO personalization to remove — return it unchanged,
+  even if it explains what each specialization covers.
 - Only remove personalization/recommendation content, nothing else.
 - Return ONLY the trimmed answer text, no explanation, no markdown fences.
 """
+
+# Arabic runs ~2.2 chars/token (see project token-budget heuristic). The
+# expected output is very often the SAME length as the input (most answers
+# have nothing to strip), so the budget must cover a full-length response
+# plus room for reasoning_effort="low" overhead — not half the input.
+_CHARS_PER_TOKEN = 2.2
+_MIN_KEEP_RATIO = 0.5  # if the model returns less than this fraction of the
+                       # original length, treat it as over-trimming and keep
+                       # the original instead of trusting the output.
 
 
 def strip_personalization_tail(response: str) -> str:
@@ -60,20 +78,38 @@ def strip_personalization_tail(response: str) -> str:
     if not response or len(response) < 50:
         return response
     try:
+        estimated_tokens = int(len(response) / _CHARS_PER_TOKEN)
         resp = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="openai/gpt-oss-20b",
             messages=[
                 {"role": "system", "content": _MEMORY_STRIP_SYSTEM},
                 {"role": "user", "content": response},
             ],
             temperature=0.0,
-            max_tokens=len(response) // 2 + 200,
+            max_tokens=estimated_tokens + 300,  # full-length budget + reasoning/margin
+            reasoning_effort="low",
+            include_reasoning=False,
         )
-        trimmed = resp.choices[0].message.content.strip()
-        if trimmed:
-            print(f"[Memory] stripped {len(response) - len(trimmed)} chars of personalization")
-            return trimmed
-        return response
+        trimmed = (resp.choices[0].message.content or "").strip()
+
+        if not trimmed:
+            print("[Memory strip] empty result — keeping original")
+            return response
+
+        # Safety net: a plausible strip removes a sentence or two, not most
+        # of the answer. If most of the content disappeared, something went
+        # wrong (truncation or over-aggressive stripping) — don't trust it.
+        ratio = len(trimmed) / len(response)
+        if ratio < _MIN_KEEP_RATIO:
+            print(
+                f"[Memory strip] suspicious over-trim ({ratio:.0%} of original "
+                f"kept) — keeping original instead. Trimmed output was:\n{trimmed}"
+            )
+            return response
+
+        print(f"[Memory] stripped {len(response) - len(trimmed)} chars of personalization")
+        print(trimmed)
+        return trimmed
     except Exception as e:
         print(f"[Memory strip error] {e}")
         return response
@@ -91,4 +127,3 @@ def _save_to_memory_background(memory: ConversationBufferWindowMemory, user_msg:
     except Exception as e:
         print(f"[Background memory save error] {e}")
         save_to_memory(memory, user_msg, assistant_msg)  # fail safe — save unstripped rather than lose the turn
-

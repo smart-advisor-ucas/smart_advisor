@@ -30,15 +30,18 @@ def send_fallback_telegram(student: dict, question: str) -> bool:
         "_Sent automatically by the UCAS Smart Advisor system._",
     ]
     message = "\n".join(lines)
-    # CHANGED — goes through the Cloudflare Worker relay (TELEGRAM_API_BASE) instead of
+    # Goes through the Cloudflare Worker relay (TELEGRAM_API_BASE) instead of
     # api.telegram.org directly, to avoid Telegram blocking the datacenter egress IP
     # that Hugging Face Spaces assigns on restart.
-    url = f"{TELEGRAM_API_BASE}/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    relay = (TELEGRAM_API_BASE or "https://api.telegram.org").rstrip("/")
+    url = f"{relay}/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id":    TELEGRAM_CHAT_ID,
         "text":       message,
         "parse_mode": "Markdown",
     }
+
+    print(f"[Telegram] posting via {relay}", flush=True)
 
     max_retries = 3                                  # NEW — retry with backoff
     for attempt in range(max_retries):
@@ -46,8 +49,9 @@ def send_fallback_telegram(student: dict, question: str) -> bool:
             resp = requests.post(url, json=payload, timeout=60)   # CHANGED — was 15, now 60 for weak connections
             result = resp.json()
             if result.get("ok"):
+                print("[Telegram] sendMessage ok", flush=True)
                 return True
-            print(f"[Telegram] API returned error: {result}")
+            print(f"[Telegram] API returned error: {result}", flush=True)
             return False  # API error — no point retrying
 
         except (ReadTimeout, ConnectionError) as e:

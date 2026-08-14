@@ -12,11 +12,21 @@ from groq import Groq
 _ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(dotenv_path=_ENV_PATH, override=True)
 
+
+def _env(name: str, default: str | None = None) -> str | None:
+    value = os.getenv(name, default)
+    if value is None:
+        return None
+    return value.strip().strip('"').strip("'")
+
+
 # ── API Keys ─────────────────────────────────────────────────────────────
 HF_KEY           = os.getenv("HF_TOKEN")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID  = os.getenv("TELEGRAM_CHAT_ID")
-TELEGRAM_API_BASE = os.getenv("TELEGRAM_API_BASE", "https://api.telegram.org")
+TELEGRAM_BOT_TOKEN = _env("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID  = _env("TELEGRAM_CHAT_ID")
+# Cloudflare Worker relay; trailing slash must be stripped so we don't build
+# https://worker.example//bot<token>/sendMessage
+TELEGRAM_API_BASE = (_env("TELEGRAM_API_BASE") or "https://api.telegram.org").rstrip("/")
 GROQ_API_KEY       = os.getenv("GROQ_API_KEY") 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 

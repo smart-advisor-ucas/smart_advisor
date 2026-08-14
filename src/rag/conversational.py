@@ -93,13 +93,13 @@ Rules:
 
     def _try(client, model):
         resp = client.chat.completions.create(
-            model=model, messages=messages, temperature=0.0, max_tokens=100
+            model=model, messages=messages, temperature=0.0, max_tokens=500, reasoning_effort="low", include_reasoning=False,
         )
         raw = re.sub(r"```json|```", "", resp.choices[0].message.content).strip()
         return json.loads(raw)
 
     try:
-        result = _try(groq_client, "llama-3.1-8b-instant")
+        result = _try(groq_client, "openai/gpt-oss-20b")
     except Exception as e:
         print(f"[is_conversational/Groq error] {e} — falling back to gpt-4o-mini")
         try:

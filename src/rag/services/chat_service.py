@@ -108,7 +108,11 @@ def process_message(session: ChatSession, user_message: str) -> str:
 
     # ── Phase 1: Onboarding — collect student profile ──────────────────
     if session.onboarding:
-        session.profile = extract_profile(user_message, session.profile)
+        pending_fields = session.profile.missing_fields()
+        pending_field = pending_fields[0] if pending_fields else None
+        session.profile = extract_profile(
+            user_message, session.profile, pending_field=pending_field
+        )
         next_q = next_onboarding_question(session.profile)
 
         if next_q:
