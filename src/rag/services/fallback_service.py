@@ -1,19 +1,99 @@
 """
-Fallback mechanism: notify the human academic advisor via Telegram when the
-system can't answer a question, and the LLM tool schema used to trigger this.
+Fallback mechanism: notify the human academic advisor when the system can't
+answer a question, and the LLM tool schema used to trigger this.
+
+Two delivery channels, selected by NOTIFY_CHANNEL:
+
+  - "email" (default): Gmail SMTP. Works from Hugging Face Spaces — Spaces
+    shares outbound IPs across many users, and Telegram aggressively blocks
+    datacenter IP ranges that have seen abuse, so Telegram delivery from a
+    Space is unreliable regardless of the bot token/chat ID being correct.
+    SMTP does not have this problem.
+  - "telegram": the original bot notification (optionally through the
+    Cloudflare Worker relay, TELEGRAM_API_BASE). Reliable locally.
+  - "both": send on both channels.
+
+Whichever channel is selected, the send runs in a daemon thread so delivery
+latency (up to ~60s per attempt) never blocks the /chat request. If the
+selected channel fails — in "both" mode, only if BOTH fail — the question is
+appended to failed_questions.log instead.
 """
 import json
+import smtplib
 import threading
 import time
 from datetime import datetime
+from email.header import Header
+from email.mime.text import MIMEText
 
 import requests
 from requests.exceptions import ReadTimeout, ConnectionError
 
-from src.utils.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_API_BASE
+from src.utils.config import (
+    ADVISOR_EMAIL,
+    NOTIFY_CHANNEL,
+    SMTP_APP_PASSWORD,
+    SMTP_EMAIL,
+    TELEGRAM_API_BASE,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
+)
+
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+
+# ── Channel selection (same pattern as VOICE_TTS in src/voice/config.py) ──
+DEFAULT_NOTIFY_CHANNEL = "email"
+VALID_NOTIFY_CHANNELS = {"email", "telegram", "both"}
 
 
-def send_fallback_telegram(student: dict, question: str) -> bool:
+def resolve_notify_channel(explicit: str | None = None) -> str:
+    ch = (explicit or NOTIFY_CHANNEL or DEFAULT_NOTIFY_CHANNEL).lower()
+    if ch not in VALID_NOTIFY_CHANNELS:
+        raise ValueError(f"notify channel must be one of {VALID_NOTIFY_CHANNELS}, got {ch!r}")
+    return ch
+
+
+def _send_via_email(student: dict, question: str) -> bool:
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    body = (
+        f"[Smart Advisor] Unanswered Question\n\n"
+        f"Student Details\n"
+        f"Name  : {student.get('name',  'Not provided')}\n"
+        f"Email : {student.get('email', 'Not provided')}\n"
+        f"Phone : {student.get('phone', 'Not provided')}\n"
+        f"Time  : {timestamp}\n\n"
+        f"Unanswered Question\n{question}\n\n"
+        f"Sent automatically by the UCAS Smart Advisor system."
+    )
+
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["Subject"] = Header("[Smart Advisor] سؤال بحاجة متابعة", "utf-8")
+    msg["From"] = SMTP_EMAIL
+    msg["To"] = ADVISOR_EMAIL
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=60) as server:   # 60s — same reasoning as the old Telegram timeout: tolerate a slow/weak connection
+            server.starttls()
+            server.login(SMTP_EMAIL, SMTP_APP_PASSWORD)
+            server.sendmail(SMTP_EMAIL, [ADVISOR_EMAIL], msg.as_string())
+        return True
+
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"[Email] Authentication failed — check SMTP_EMAIL / SMTP_APP_PASSWORD: {e}")
+        return False
+
+    except (smtplib.SMTPException, OSError) as e:
+        print(f"[Email] Send failed: {e}")
+        return False
+
+    except Exception as e:
+        print(f"[Email] Unexpected error: {e}")
+        return False
+
+
+def _send_via_telegram(student: dict, question: str) -> bool:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     lines = [                                        # CHANGED — reverted escaping (legacy Markdown doesn't support it)
         "*[Smart Advisor] Unanswered Question*",
@@ -72,12 +152,24 @@ def send_fallback_telegram(student: dict, question: str) -> bool:
 
 def _send_fallback_background(student: dict, question: str) -> None:
     """
-    Runs in a background thread: does the actual Telegram send (with its
-    internal retries/backoff, now up to 60s per attempt) and, on failure,
-    writes to the local backup log. Never touches the request/response path.
+    Runs in a background thread: does the actual send on the configured
+    channel(s) and, on failure, writes to the local backup log. Never touches
+    the request/response path, so a slow channel never delays the reply to
+    the student or blocks processing of their next question.
     """
-    success = send_fallback_telegram(student, question)
-    if not success:                                  # local backup log
+    try:
+        channel = resolve_notify_channel()
+    except ValueError as e:
+        print(f"[Notify] {e} — using default {DEFAULT_NOTIFY_CHANNEL!r}", flush=True)
+        channel = DEFAULT_NOTIFY_CHANNEL
+
+    success = False
+    if channel in ("email", "both"):
+        success = _send_via_email(student, question) or success
+    if channel in ("telegram", "both"):
+        success = _send_via_telegram(student, question) or success
+
+    if not success:                                  # local backup log ("both": only when both channels failed)
         with open("failed_questions.log", "a", encoding="utf-8") as f:
             f.write(
                 f"\n---\nTime: {datetime.now()}\n"
@@ -90,11 +182,11 @@ def _send_fallback_background(student: dict, question: str) -> None:
 
 def record_unknown_question(question: str, name: str, email: str = None, phone: str = None) -> dict:
     """
-    Fires the Telegram notification in the background and returns immediately
-    — so a slow/blocked Telegram call never delays the reply to the student
-    or the processing of their next question. Actual delivery success/failure
-    is only known inside the background thread (logged to failed_questions.log
-    on failure), not reflected in this return value.
+    Fires the advisor notification in a background thread and returns
+    immediately — so a slow/blocked channel never delays the reply to the
+    student or the processing of their next question. Actual delivery
+    success/failure is only known inside the background thread (logged to
+    failed_questions.log on failure), not reflected in this return value.
     """
     student = {"name": name, "email": email, "phone": phone}
     threading.Thread(
