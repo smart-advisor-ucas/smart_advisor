@@ -29,14 +29,18 @@ TELEGRAM_CHAT_ID  = _env("TELEGRAM_CHAT_ID")
 TELEGRAM_API_BASE = (_env("TELEGRAM_API_BASE") or "https://api.telegram.org").rstrip("/")
 
 # ── Advisor fallback notifications ───────────────────────────────────────
-# NOTIFY_CHANNEL: "email" | "telegram" | "both" — validated and defaulted
-# (to "email") in fallback_service.resolve_notify_channel, mirroring how the
-# voice layer resolves VOICE_TTS. All four are optional: the app must boot
-# without them, exactly as the Telegram pair was optional.
+# NOTIFY_CHANNEL: "email_api" | "email" | "telegram" | "both" — validated and
+# defaulted (to "email_api") in fallback_service.resolve_notify_channel,
+# mirroring how the voice layer resolves VOICE_TTS. All are optional: the app
+# must boot without them, exactly as the Telegram pair was optional.
 NOTIFY_CHANNEL    = _env("NOTIFY_CHANNEL")
 SMTP_EMAIL        = _env("SMTP_EMAIL")
 SMTP_APP_PASSWORD = _env("SMTP_APP_PASSWORD")
 ADVISOR_EMAIL     = _env("ADVISOR_EMAIL")
+# Resend HTTPS email API ("email_api" channel) — SMTP is blocked on HF Spaces,
+# HTTPS on 443 is not. RESEND_FROM is the verified sender address.
+RESEND_API_KEY    = _env("RESEND_API_KEY")
+RESEND_FROM       = _env("RESEND_FROM")
 GROQ_API_KEY       = os.getenv("GROQ_API_KEY") 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 

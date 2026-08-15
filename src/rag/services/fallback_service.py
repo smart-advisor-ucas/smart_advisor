@@ -2,16 +2,17 @@
 Fallback mechanism: notify the human academic advisor when the system can't
 answer a question, and the LLM tool schema used to trigger this.
 
-Two delivery channels, selected by NOTIFY_CHANNEL:
+Delivery channels, selected by NOTIFY_CHANNEL:
 
-  - "email" (default): Gmail SMTP. Works from Hugging Face Spaces — Spaces
-    shares outbound IPs across many users, and Telegram aggressively blocks
-    datacenter IP ranges that have seen abuse, so Telegram delivery from a
-    Space is unreliable regardless of the bot token/chat ID being correct.
-    SMTP does not have this problem.
+  - "email_api" (default): email over the Resend HTTPS API. The only channel
+    that works from Hugging Face Spaces: outbound SMTP (port 587) is blocked
+    there ([Errno 101] Network is unreachable) and Telegram blocks the
+    shared datacenter egress IPs by reputation — but outbound HTTPS on 443
+    works (LLM, embedding, and Azure TTS calls all succeed).
+  - "email": Gmail SMTP. Works locally; blocked from Spaces (see above).
   - "telegram": the original bot notification (optionally through the
     Cloudflare Worker relay, TELEGRAM_API_BASE). Reliable locally.
-  - "both": send on both channels.
+  - "both": send on both the SMTP and Telegram channels.
 
 Whichever channel is selected, the send runs in a daemon thread so delivery
 latency (up to ~60s per attempt) never blocks the /chat request. If the
@@ -32,6 +33,8 @@ from requests.exceptions import ReadTimeout, ConnectionError
 from src.utils.config import (
     ADVISOR_EMAIL,
     NOTIFY_CHANNEL,
+    RESEND_API_KEY,
+    RESEND_FROM,
     SMTP_APP_PASSWORD,
     SMTP_EMAIL,
     TELEGRAM_API_BASE,
@@ -41,10 +44,11 @@ from src.utils.config import (
 
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
+RESEND_API_URL = "https://api.resend.com/emails"
 
 # ── Channel selection (same pattern as VOICE_TTS in src/voice/config.py) ──
-DEFAULT_NOTIFY_CHANNEL = "email"
-VALID_NOTIFY_CHANNELS = {"email", "telegram", "both"}
+DEFAULT_NOTIFY_CHANNEL = "email_api"
+VALID_NOTIFY_CHANNELS = {"email_api", "email", "telegram", "both"}
 
 
 def resolve_notify_channel(explicit: str | None = None) -> str:
@@ -54,10 +58,12 @@ def resolve_notify_channel(explicit: str | None = None) -> str:
     return ch
 
 
-def _send_via_email(student: dict, question: str) -> bool:
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+EMAIL_SUBJECT = "[Smart Advisor] سؤال بحاجة متابعة"
 
-    body = (
+
+def _email_body(student: dict, question: str) -> str:
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return (
         f"[Smart Advisor] Unanswered Question\n\n"
         f"Student Details\n"
         f"Name  : {student.get('name',  'Not provided')}\n"
@@ -68,8 +74,12 @@ def _send_via_email(student: dict, question: str) -> bool:
         f"Sent automatically by the UCAS Smart Advisor system."
     )
 
+
+def _send_via_email(student: dict, question: str) -> bool:
+    body = _email_body(student, question)
+
     msg = MIMEText(body, "plain", "utf-8")
-    msg["Subject"] = Header("[Smart Advisor] سؤال بحاجة متابعة", "utf-8")
+    msg["Subject"] = Header(EMAIL_SUBJECT, "utf-8")
     msg["From"] = SMTP_EMAIL
     msg["To"] = ADVISOR_EMAIL
 
@@ -91,6 +101,49 @@ def _send_via_email(student: dict, question: str) -> bool:
     except Exception as e:
         print(f"[Email] Unexpected error: {e}")
         return False
+
+
+def _send_via_resend(student: dict, question: str) -> bool:
+    """Same message as the SMTP channel, but over the Resend HTTPS API
+    (port 443) — the only outbound path that works from HF Spaces."""
+    payload = {
+        "from": RESEND_FROM,
+        "to": [ADVISOR_EMAIL],
+        "subject": EMAIL_SUBJECT,
+        "text": _email_body(student, question),
+    }
+
+    try:
+        resp = requests.post(
+            RESEND_API_URL,
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+            json=payload,
+            timeout=30,
+        )
+    except requests.RequestException as e:
+        print(f"[EmailAPI] Request failed: {e}", flush=True)
+        return False
+
+    if resp.status_code in (200, 201):
+        print("[EmailAPI] sent ok", flush=True)
+        return True
+
+    # Distinguish the two failure classes that need different fixes:
+    if resp.status_code in (401, 403):
+        print(
+            f"[EmailAPI] Authentication failed ({resp.status_code}) — check "
+            f"RESEND_API_KEY: {resp.text}",
+            flush=True,
+        )
+    elif 400 <= resp.status_code < 500:
+        print(
+            f"[EmailAPI] Request rejected ({resp.status_code}) — likely an "
+            f"unverified RESEND_FROM domain or invalid recipient: {resp.text}",
+            flush=True,
+        )
+    else:
+        print(f"[EmailAPI] Server error ({resp.status_code}): {resp.text}", flush=True)
+    return False
 
 
 def _send_via_telegram(student: dict, question: str) -> bool:
@@ -164,6 +217,8 @@ def _send_fallback_background(student: dict, question: str) -> None:
         channel = DEFAULT_NOTIFY_CHANNEL
 
     success = False
+    if channel == "email_api":
+        success = _send_via_resend(student, question)
     if channel in ("email", "both"):
         success = _send_via_email(student, question) or success
     if channel in ("telegram", "both"):

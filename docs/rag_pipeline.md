@@ -94,7 +94,7 @@ If no program is mentioned at all, the filter defaults to `"علم البيان�
 
 `SIMILARITY_THRESHOLD` is currently `0.4` in the notebook (tuned down from an earlier `0.75` during evaluation — cosine similarity on BGE-M3 tends to run lower than dot-product embeddings for this domain). Tune further during evaluation weeks against a labeled query set.
 
-Both layers converge on the same tool: `record_unknown_question(question, name, email, phone)`, which fires the advisor notification in a background thread and returns `{"recorded": "pending"}` immediately. The delivery channel is selected by `NOTIFY_CHANNEL` — `email` (Gmail SMTP, default; works from Hugging Face Spaces), `telegram` (works locally; Spaces egress IPs are blocked by Telegram), or `both`. On failure the question is appended to `failed_questions.log`.
+Both layers converge on the same tool: `record_unknown_question(question, name, email, phone)`, which fires the advisor notification in a background thread and returns `{"recorded": "pending"}` immediately. The delivery channel is selected by `NOTIFY_CHANNEL` — `email_api` (Resend HTTPS API, default; the only channel that works from Hugging Face Spaces, where SMTP and Telegram are both blocked), `email` (Gmail SMTP, local only), `telegram` (local only), or `both` (SMTP + Telegram). On failure the question is appended to `failed_questions.log`.
 
 ### 2.6 System Prompt
 
